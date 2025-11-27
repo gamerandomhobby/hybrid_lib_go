@@ -4,27 +4,17 @@ skinparam linetype ortho
 skinparam nodesep 80
 skinparam ranksep 100
 
-title 5-Layer Architecture\nHexagonal (Ports & Adapters) + Clean + DDD
+title 4-Layer Library Architecture\nHexagonal (Ports & Adapters) + Clean + DDD
 
-package "Bootstrap Layer" as Bootstrap #FFEBCD {
-  note right of Bootstrap
-    **Composition Root**
-    - Wires all dependencies
-    - **Static dispatch via generics**
-    - Application lifecycle
-    - Can depend on ALL layers
-  end note
-}
-
-package "Presentation Layer" as Presentation #FFE4E1 {
-  component "CLI" as CLI
-  component "Commands" as Commands
-  note right of Presentation
-    **Driving Adapters**
-    - User interfaces (CLI, API)
-    - Request/response mapping
-    - **Depends ONLY on Application**
-    - **CANNOT access Domain**
+package "API Layer (Public Facade)" as API #FFEBCD {
+  component "api/" as APIFacade
+  component "api/desktop" as APIDesktop
+  note right of API
+    **Public Entry Point**
+    - Re-exports domain/application types
+    - api/ depends on app + domain ONLY
+    - api/desktop wires infrastructure
+    - Platform-specific sub-packages
   end note
 }
 
@@ -42,17 +32,13 @@ package "Infrastructure Layer" as Infrastructure #E6F3FF {
 package "Application Layer" as Application #E8F5E9 {
   component "Use Cases" as UseCases
   component "Ports" as Ports
-  component "application/error" as AppError #FFFF99
+  component "Commands" as Commands
   note right of Application
     **Orchestration Layer**
     - Coordinates domain logic
     - Defines Input/Output Ports
-    - Re-exports Domain types
+    - DTOs (GreetCommand)
     - **Depends ONLY on Domain**
-  end note
-  note bottom of AppError
-    Re-exports domain/error
-    for Presentation layer
   end note
 }
 
@@ -69,44 +55,40 @@ package "Domain Layer" as Domain #FFF9E6 {
 }
 
 ' Dependencies - ALL point INWARD (center-seeking)
-Bootstrap -down-> Presentation : wires
-Bootstrap -down-> Infrastructure : wires
-Bootstrap -down-> Application : wires
-Bootstrap -down-> Domain : wires
+APIFacade -down-> Application : re-exports types
+APIFacade -down-> Domain : re-exports types
 
-Presentation -down-> Application : calls Input Ports\nuses application/error
-Presentation -[hidden]down-> Domain
+' API/desktop can wire everything (composition)
+APIDesktop -down-> Infrastructure : wires adapters
+APIDesktop -down-> Application : creates use cases
+APIDesktop -down-> APIFacade : uses API types
 
 Infrastructure -down-> Application : implements Output Ports
 Infrastructure -down-> Domain : uses Value Objects
 
 Application -down-> Domain : orchestrates
 
-' Critical boundaries
-note on link
-  ✅ ALLOWED
-  Uses application/error
-  (not domain/error)
-end note
-
-' Forbidden dependency
-Presentation .right.> Domain #red : ❌ FORBIDDEN\nNo transitive access
+' Forbidden dependency (CRITICAL)
+APIFacade .right.> Infrastructure #red : ❌ FORBIDDEN\nUse api/desktop
 
 legend right
-  **Key Architectural Rules**
-  ═══════════════════════════════
-  ✅ **Presentation → Application ONLY**
-     (no transitive Domain access)
+  **Key Architectural Rules (LIBRARY)**
+  ═══════════════════════════════════════
+  ✅ **api/ → Application + Domain ONLY**
+     (does NOT import Infrastructure)
+  ✅ api/desktop → ALL (platform wiring)
   ✅ Infrastructure → Application + Domain
   ✅ Application → Domain
-  ✅ Bootstrap → ALL (composition root)
 
-  ❌ **NO** Presentation → Domain
-  ❌ **NO** Presentation ↔ Infrastructure
+  ❌ **NO** api/ → Infrastructure
+     (use api/desktop sub-package instead)
   ❌ **NO** Domain → anything
 
-  **Domain is the ONLY shareable layer**
-  across multiple applications
+  **Library vs Application**
+  ═══════════════════════════════════════
+  • Library: domain, application, infrastructure, api
+  • App: domain, application, infrastructure,
+         presentation, bootstrap
 endlegend
 
 @enduml

@@ -2,39 +2,34 @@
 !theme plain
 skinparam componentStyle rectangle
 
-title Package Structure\nActual Packages in Each Layer
+title Package Structure (LIBRARY)\nActual Packages in Each Layer
 
-frame "Bootstrap Layer" #FFEBCD {
-  component "bootstrap/cli" as BootstrapCLI
-  note right of BootstrapCLI
-    **Composition Root**
-    - Wires all dependencies
-    - Generic instantiation
-    - Application entry point
+frame "API Layer (Public Facade)" #FFEBCD {
+  component "api" as APIFacade
+  component "api/desktop" as APIDesktop
+  note right of APIFacade
+    **Public Entry Point**
+    Re-exports domain + application types
 
     ```go
-    uc := usecase.NewGreetUseCase[
-      *adapter.ConsoleWriter](writer)
-    cmd := command.NewGreetCommand[
-      *usecase.GreetUseCase[
-        *adapter.ConsoleWriter]](uc)
+    type Result[T any] = domerr.Result[T]
+    type Person = valueobject.Person
+    type GreetCommand = command.GreetCommand
+    type WriterPort = outbound.WriterPort
     ```
   end note
-}
+  note right of APIDesktop
+    **Platform Wiring**
+    Creates ready-to-use greeter
 
-frame "Presentation Layer" #FFE4E1 {
-  component "presentation/adapter/cli/command" as PresentationGreet
-  note right of PresentationGreet
-    **Depends on:**
-    - application/command
-    - application/port/inbound
-    - **application/error** ✅
-
-    **Cannot access:**
-    ❌ domain/* packages
-
-    **Generic over GreetPort:**
-    GreetCommand[UC GreetPort]
+    ```go
+    func NewGreeter() *Greeter {
+      writer := adapter.NewConsoleWriter()
+      uc := usecase.NewGreetUseCase[
+        *adapter.ConsoleWriter](writer)
+      return &Greeter{useCase: uc}
+    }
+    ```
   end note
 }
 
@@ -43,7 +38,7 @@ frame "Infrastructure Layer" #E6F3FF {
   note right of InfraConsole
     **Depends on:**
     - application/port/outbound
-    - domain/error (direct) ✅
+    - domain/error (direct)
     - application/model
 
     **Implements WriterPort:**
@@ -52,25 +47,21 @@ frame "Infrastructure Layer" #E6F3FF {
 }
 
 frame "Application Layer" #E8F5E9 {
-  component "application/error" as AppError #FFFF99
   component "application/command" as AppCommand
   component "application/usecase" as AppUsecase
   component "application/port/outbound" as AppOutbound
   component "application/port/inbound" as AppInbound
   component "application/model" as AppModel
+  component "application/error" as AppError
 
-  note right of AppError
-    **Re-exports domain/error**
-    For Presentation layer use
+  note right of AppUsecase
+    **Generic Use Case**
+    Static dispatch via generics
 
     ```go
-    import domerr "domain/error"
-
-    type ErrorType = domerr.ErrorType
-    type ErrorKind = domerr.ErrorKind
-    type Result[T any] = domerr.Result[T]
-
-    var ValidationError = domerr.ValidationError
+    type GreetUseCase[W WriterPort] struct {
+      writer W
+    }
     ```
   end note
 }
@@ -87,47 +78,52 @@ frame "Domain Layer" #FFF9E6 {
   end note
 }
 
-' Dependencies (center-seeking - all point inward)
-PresentationGreet -down-> AppCommand : uses DTO
-PresentationGreet -down-> AppInbound : uses GreetPort
-PresentationGreet -down-> AppError : uses ✅
+' API dependencies
+APIFacade -down-> AppCommand : re-exports
+APIFacade -down-> AppInbound : re-exports
+APIFacade -down-> AppOutbound : re-exports
+APIFacade -down-> DomainError : re-exports
+APIFacade -down-> DomainPerson : re-exports
 
+' API/desktop wires infrastructure
+APIDesktop -down-> InfraConsole : wires
+APIDesktop -down-> AppUsecase : creates
+APIDesktop -left-> APIFacade : uses types
+
+' Infrastructure dependencies
 InfraConsole -down-> AppOutbound : implements WriterPort
-InfraConsole -down-> DomainError : uses ✅
+InfraConsole -down-> DomainError : uses
 
+' Application dependencies
 AppCommand -down-> DomainPerson : uses
 AppUsecase -down-> DomainPerson : validates
 AppOutbound -down-> DomainResult : uses
 AppInbound -down-> DomainResult : uses
 AppError -down-> DomainError : re-exports
 
-' Forbidden dependency (shown as violation)
-PresentationGreet .right.> DomainError #red : ❌ FORBIDDEN\nNo transitive access
+' Forbidden dependency (critical)
+APIFacade .right.> InfraConsole #red : ❌ FORBIDDEN\nUse api/desktop
 
 legend bottom
-  **Package Naming Convention**
+  **Library Package Structure**
   ════════════════════════════════════
-  All packages use hierarchical paths:
-  • parent/child/grandchild pattern
-  • Lowercase with underscores
-  • Go module per layer
+  • api/         - Public facade (re-exports)
+  • api/desktop/ - Platform-specific wiring
+  • application/ - Use cases, ports, commands
+  • domain/      - Pure business logic
+  • infrastructure/ - Adapter implementations
 
-  **Example:**
-  • Package: domain/valueobject
-  • File: person.go
-  • Type: Person
-
-  **Dependency Rules**
+  **Dependency Rules (LIBRARY)**
   ════════════════════════════════════
-  ✅ Presentation → application/* packages
-  ✅ Infrastructure → application/* + domain/* packages
-  ✅ Application → domain/* packages
-  ❌ Presentation → domain/* packages (forbidden!)
+  ✅ api/ → application/* + domain/*
+  ✅ api/desktop → ALL (composition root)
+  ✅ Infrastructure → application/* + domain/*
+  ✅ Application → domain/*
+  ❌ api/ → infrastructure/* (use api/desktop)
 
   **Static Dispatch with Generics**
   ════════════════════════════════════
   • GreetUseCase[W WriterPort] - generic over writer
-  • GreetCommand[UC GreetPort] - generic over use case
   • Concrete types known at compile time
   • Zero runtime overhead (no vtable)
 endlegend

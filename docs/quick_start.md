@@ -1,19 +1,18 @@
 # Hybrid_Lib_Go Quick Start Guide
 
-**Version:** 1.0.0  
-**Date:** November 26, 2025  
-**SPDX-License-Identifier:** BSD-3-Clause  
-**License File:** See the LICENSE file in the project root.  
-**Copyright:** © 2025 Michael Gardner, A Bit of Help, Inc.  
-**Status:** Released  
+**Version:** 1.0.0
+**Date:** November 26, 2025
+**SPDX-License-Identifier:** BSD-3-Clause
+**License File:** See the LICENSE file in the project root.
+**Copyright:** (c) 2025 Michael Gardner, A Bit of Help, Inc.
+**Status:** Released
 
 ---
 
 ## Table of Contents
 
 - [Installation](#installation)
-- [First Build](#first-build)
-- [Running the Application](#running-the-application)
+- [Library Usage](#library-usage)
 - [Understanding the Architecture](#understanding-the-architecture)
 - [Making Your First Change](#making-your-first-change)
 - [Running Tests](#running-tests)
@@ -39,113 +38,147 @@
 git clone https://github.com/abitofhelp/hybrid_lib_go.git
 cd hybrid_lib_go
 
-# Build with Make
+# Build all modules
 make build
 
 # Or build directly with Go
-go build -o cmd/greeter/greeter ./cmd/greeter
+go build ./...
 ```
 
 ### Verify Installation
 
 ```bash
-# Check that the executable was built
-ls -lh cmd/greeter/greeter
+# Run unit tests
+make test
 
-# Run the application
-./cmd/greeter/greeter World
-# Output: Hello, World!
+# Run integration tests
+make test-integration
 ```
 
-**Success!** You've built your first hexagonal architecture application in Go.
+**Success!** You've built the library and verified it works.
 
 ---
 
-## First Build
+## Library Usage
 
-The project uses Make for building:
-
-### Using Make (Recommended)
-
-```bash
-# Development build (with race detector)
-make build
-
-# Or explicit development mode
-make build-dev
-
-# Release build (optimized)
-make build-release
-```
-
-### Using Go Directly
-
-```bash
-# Development build
-go build -race -o cmd/greeter/greeter ./cmd/greeter
-
-# Release build
-go build -ldflags="-s -w" -o cmd/greeter/greeter ./cmd/greeter
-```
-
-**Build Output:**
-- Executable: `cmd/greeter/greeter`
-
----
-
-## Running the Application
-
-The Hybrid_Lib_Go starter includes a simple greeter application demonstrating all architectural layers:
+Hybrid_Lib_Go is a **library**, not an application. You import it into your own application.
 
 ### Basic Usage
 
-```bash
-# Greet a person
-./cmd/greeter/greeter Alice
-# Output: Hello, Alice!
+```go
+package main
 
-# Name with spaces (use quotes)
-./cmd/greeter/greeter "Bob Smith"
-# Output: Hello, Bob Smith!
+import (
+    "context"
+    "fmt"
+    "os"
 
-# Show usage
-./cmd/greeter/greeter
-# Output: Usage: greeter <name>
-# Exit code: 1
+    "github.com/abitofhelp/hybrid_lib_go/api"
+    "github.com/abitofhelp/hybrid_lib_go/api/desktop"
+)
+
+func main() {
+    // Create a greeter with console output
+    greeter := desktop.NewGreeter()
+
+    // Create context and command
+    ctx := context.Background()
+    cmd := api.NewGreetCommand("Alice")
+
+    // Execute greeting
+    result := greeter.Execute(ctx, cmd)
+
+    // Handle result
+    if result.IsOk() {
+        fmt.Println("Greeting sent successfully!")
+        os.Exit(0)
+    } else {
+        errInfo := result.ErrorInfo()
+        switch errInfo.Kind {
+        case api.ValidationError:
+            fmt.Fprintf(os.Stderr, "Invalid input: %s\n", errInfo.Message)
+        case api.InfrastructureError:
+            fmt.Fprintf(os.Stderr, "System error: %s\n", errInfo.Message)
+        }
+        os.Exit(1)
+    }
+}
 ```
 
-### Error Handling Example
+### Custom Writer for Testing
 
-```bash
-# Empty name triggers validation error
-./cmd/greeter/greeter ""
-# Output: Error: Person name cannot be empty
-# Exit code: 1
+```go
+package myapp_test
+
+import (
+    "bytes"
+    "context"
+    "testing"
+
+    "github.com/abitofhelp/hybrid_lib_go/api"
+    "github.com/abitofhelp/hybrid_lib_go/api/desktop"
+    "github.com/abitofhelp/hybrid_lib_go/application/model"
+    domerr "github.com/abitofhelp/hybrid_lib_go/domain/error"
+)
+
+// MockWriter captures output for testing
+type MockWriter struct {
+    Buffer bytes.Buffer
+}
+
+func (w *MockWriter) Write(ctx context.Context, msg string) domerr.Result[model.Unit] {
+    w.Buffer.WriteString(msg)
+    return domerr.Ok(model.Unit{})
+}
+
+func (w *MockWriter) String() string {
+    return w.Buffer.String()
+}
+
+func TestGreeting(t *testing.T) {
+    writer := &MockWriter{}
+    greeter := desktop.GreeterWithWriter[*MockWriter](writer)
+
+    ctx := context.Background()
+    result := greeter.Execute(ctx, api.NewGreetCommand("Bob"))
+
+    if !result.IsOk() {
+        t.Fatalf("Expected success, got error")
+    }
+
+    if !strings.Contains(writer.String(), "Hello, Bob!") {
+        t.Errorf("Expected greeting, got: %s", writer.String())
+    }
+}
 ```
 
-**Key Points:**
-- All errors return via Result monad (no panics across boundaries)
-- Exit code 0 = success, 1 = error
-- Validation happens in Domain layer
-- Errors propagate through Application to Presentation
+### Direct Domain Usage
+
+```go
+// Use domain types directly
+result := api.CreatePerson("Alice")
+if result.IsOk() {
+    person := result.Value()
+    greeting := person.GreetingMessage()
+    fmt.Println(greeting) // "Hello, Alice!"
+}
+```
 
 ---
 
 ## Understanding the Architecture
 
-Hybrid_Lib_Go demonstrates **5-layer hexagonal architecture**:
+Hybrid_Lib_Go demonstrates **4-layer library hexagonal architecture**:
 
 ### Layer Overview
 
 ```
 ┌─────────────────────────────────────────────┐
-│  Bootstrap (Composition Root)               │  ← Wires everything together
-├─────────────────────────────────────────────┤
-│  Presentation (CLI)                         │  ← User interface (depends on Application ONLY)
-├─────────────────────────────────────────────┤
-│  Application (Use Cases + Ports)            │  ← Orchestration layer
+│  API Layer (Public Facade)                  │  ← api/, api/desktop/
 ├─────────────────────────────────────────────┤
 │  Infrastructure (Adapters)                  │  ← Technical implementations
+├─────────────────────────────────────────────┤
+│  Application (Use Cases + Ports)            │  ← Orchestration layer
 ├─────────────────────────────────────────────┤
 │  Domain (Business Logic)                    │  ← Pure business rules (ZERO dependencies)
 └─────────────────────────────────────────────┘
@@ -154,17 +187,18 @@ Hybrid_Lib_Go demonstrates **5-layer hexagonal architecture**:
 ### Key Architectural Principles
 
 1. **Domain has zero dependencies** - Pure business logic
-2. **Presentation cannot access Domain** - Must use Application layer re-exports
-3. **Static dependency injection** - Via generics (compile-time wiring)
-4. **Railway-oriented programming** - Result monads for error handling
-5. **Multi-module workspace** - go.work manages separate go.mod per layer
+2. **API layer does NOT import infrastructure** - Uses re-exports only
+3. **Platform wiring in api/desktop/** - Creates ready-to-use instances
+4. **Static dependency injection** - Via generics (compile-time wiring)
+5. **Railway-oriented programming** - Result monads for error handling
+6. **Multi-module workspace** - go.work manages separate go.mod per layer
 
 ### Request Flow Example
 
 ```
-User Input ("Alice")
+Consumer App
     ↓
-presentation/adapter/cli/command.GreetCommand (parses input)
+api/desktop.Greeter (ready-to-use)
     ↓
 application/usecase.GreetUseCase (validates via Domain)
     ↓
@@ -173,8 +207,6 @@ domain/valueobject.Person (business rules)
 infrastructure/adapter.ConsoleWriter (output)
     ↓
 Result[Unit] (success or error)
-    ↓
-Exit Code (0 or 1)
 ```
 
 ---
@@ -198,13 +230,10 @@ Find the `GreetingMessage()` method and modify it. The business logic is pure an
 
 ```bash
 # Rebuild
-make rebuild
+make build
 
 # Run tests to ensure nothing broke
 make test-all
-
-# Test manually
-./cmd/greeter/greeter Alice
 ```
 
 **Best Practice**: Always run tests after making changes.
@@ -217,22 +246,14 @@ Hybrid_Lib_Go includes comprehensive testing:
 
 ### Test Organization
 
-- **Unit Tests** (42 assertions): Domain layer logic
-- **Integration Tests** (21 tests): CLI binary execution
-- **E2E Tests** (10 tests): Full system verification
+- **Unit Tests**: Domain and application logic
+- **Integration Tests**: API usage verification
 
 ### Run All Tests
 
 ```bash
 # Run entire test suite
 make test-all
-
-# Expected output:
-# ########################################
-# ###                                  ###
-# ###   ALL TESTS PASSED               ###
-# ###                                  ###
-# ########################################
 ```
 
 ### Run Specific Test Suites
@@ -243,12 +264,9 @@ make test
 
 # Integration tests only
 make test-integration
-
-# E2E tests only
-make test-e2e
 ```
 
-**Test Framework**: Custom lightweight framework in `domain/test/` plus testify for assertions.
+**Test Framework**: testify for assertions.
 
 ---
 
@@ -257,19 +275,15 @@ make test-e2e
 ### Building
 
 ```bash
-make build              # Development build (default)
-make build-dev          # Explicit development mode
-make build-release      # Release build (optimized)
-make rebuild            # Clean and rebuild
+make build              # Build all modules
 ```
 
 ### Testing
 
 ```bash
 make test               # Run unit tests
-make test-all           # Run all tests (unit + integration + e2e)
+make test-all           # Run all tests (unit + integration)
 make test-integration   # Integration tests only
-make test-e2e           # E2E tests only
 ```
 
 ### Quality & Architecture
@@ -284,13 +298,6 @@ make lint               # Run golangci-lint
 
 ```bash
 make clean              # Clean build artifacts
-```
-
-### Utilities
-
-```bash
-make run NAME=Alice     # Build and run with argument
-make help               # Show all available targets
 ```
 
 ---
@@ -323,16 +330,7 @@ go work sync
 make check-arch
 ```
 
-Violations indicate forbidden imports (e.g., Presentation importing Domain).
-
-### Q: Tests fail with "binary not found"
-
-**A:** Build the application first:
-
-```bash
-make build
-make test-all
-```
+Violations indicate forbidden imports (e.g., API importing Infrastructure).
 
 ### Q: How do I run a single test?
 
@@ -340,7 +338,7 @@ make test-all
 
 ```bash
 # Run specific test
-go test -v -run TestGreeter_ValidName ./test/integration/...
+go test -v -run TestGreeter_Execute_Success ./test/integration/...
 
 # Run with build tag
 go test -v -tags=integration ./test/integration/...
@@ -358,11 +356,14 @@ go test -v -tags=integration ./test/integration/...
 
 ### Read the Source Code
 
-Start with the wiring in Bootstrap:
+Start with the API facade:
 
 ```bash
-# See how all layers are wired together
-cat bootstrap/cli/cli.go
+# See how types are re-exported
+cat api/api.go
+
+# See how infrastructure is wired
+cat api/desktop/desktop.go
 ```
 
 Then explore each layer:
@@ -376,12 +377,6 @@ ls application/
 
 # Infrastructure (adapters)
 ls infrastructure/
-
-# Presentation (CLI)
-ls presentation/
-
-# Bootstrap (composition root)
-ls bootstrap/
 ```
 
 ### Study the Test Suite
@@ -389,9 +384,6 @@ ls bootstrap/
 ```bash
 # See how tests are organized
 ls -R test/
-
-# Read test framework
-cat domain/test/test_framework.go
 ```
 
 ### Understand Static Dispatch
@@ -416,18 +408,18 @@ Follow the pattern:
 1. **Domain**: Create value objects/entities (`domain/valueobject/`)
 2. **Application**: Define command, use case, ports (`application/`)
 3. **Infrastructure**: Implement adapters (`infrastructure/adapter/`)
-4. **Presentation**: Create CLI command (`presentation/adapter/cli/command/`)
-5. **Bootstrap**: Wire everything together (`bootstrap/cli/`)
-6. **Tests**: Add unit/integration/e2e tests (`test/`)
+4. **API**: Re-export types (`api/api.go`)
+5. **API/desktop**: Wire infrastructure (`api/desktop/desktop.go`)
+6. **Tests**: Add unit/integration tests (`test/`)
 
 ---
 
 ## Documentation Index
 
-- 📖 **[Main Documentation Hub](index.md)** - All documentation links
-- 📋 **[Software Requirements Specification](formal/software_requirements_specification.md)** - Requirements
-- 🏗️ **[Software Design Specification](formal/software_design_specification.md)** - Architecture
-- 🧪 **[Software Test Guide](formal/software_test_guide.md)** - Testing guide
+- **[Main Documentation Hub](index.md)** - All documentation links
+- **[Software Requirements Specification](formal/software_requirements_specification.md)** - Requirements
+- **[Software Design Specification](formal/software_design_specification.md)** - Architecture
+- **[Software Test Guide](formal/software_test_guide.md)** - Testing guide
 
 ---
 
@@ -435,14 +427,14 @@ Follow the pattern:
 
 For questions or issues:
 
-- 🐛 **Issues**: [GitHub Issues](https://github.com/abitofhelp/hybrid_lib_go/issues)
-- 📖 **Documentation**: See `docs/` directory
+- **Issues**: [GitHub Issues](https://github.com/abitofhelp/hybrid_lib_go/issues)
+- **Documentation**: See `docs/` directory
 
 ---
 
 ## License
 
 Hybrid_Lib_Go is licensed under the BSD-3-Clause License.
-Copyright © 2025 Michael Gardner, A Bit of Help, Inc.
+Copyright (c) 2025 Michael Gardner, A Bit of Help, Inc.
 
 See [LICENSE](../LICENSE) for full license text.

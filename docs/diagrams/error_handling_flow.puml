@@ -1,29 +1,29 @@
 @startuml error_handling_flow
 !theme plain
 
-title Error Handling Flow\nRailway-Oriented Programming with Result[T] Monad
+title Error Handling Flow (LIBRARY)\nRailway-Oriented Programming with Result[T] Monad
 
-actor User
+actor "Consumer\nApp Code" as User
 
-participant "Presentation\ncommand.GreetCommand" as Presentation #FFE4E1
+participant "API\napi/desktop.Greeter" as API #FFEBCD
 participant "Application\nusecase.GreetUseCase" as Application #E8F5E9
 participant "Infrastructure\nadapter.ConsoleWriter" as Infrastructure #E6F3FF
 participant "Domain\nerror.Result[T]" as Domain #FFF9E6
 
 == Happy Path (Success) ==
 
-User -> Presentation : ./greeter Alice
-activate Presentation
+User -> API : greeter.Execute(ctx, api.NewGreetCommand("Alice"))
+activate API
 
-Presentation -> Presentation : Create Command DTO
+API -> API : Delegate to UseCase
 note right
   ```go
-  cmd := command.NewGreetCommand("Alice")
-  ctx := context.Background()
+  // API/desktop wires infrastructure
+  return g.useCase.Execute(ctx, cmd)
   ```
 end note
 
-Presentation -> Application : useCase.Execute(ctx, cmd)\n[STATIC DISPATCH]
+API -> Application : useCase.Execute(ctx, cmd)\n[STATIC DISPATCH]
 activate Application
 
 Application -> Application : valueobject.CreatePerson(name)
@@ -45,19 +45,26 @@ end note
 Infrastructure --> Application : domerr.Ok(model.UnitValue)
 deactivate Infrastructure
 
-Application --> Presentation : domerr.Ok(model.UnitValue)
+Application --> API : domerr.Ok(model.UnitValue)
 deactivate Application
 
-Presentation -> Presentation : result.IsOk() == true
-Presentation --> User : Exit code 0
-deactivate Presentation
+API --> User : api.Ok(api.Unit{})
+deactivate API
+
+note right of User
+  ```go
+  if result.IsOk() {
+    // Greeting was written
+  }
+  ```
+end note
 
 == Error Path (Infrastructure Failure) ==
 
-User -> Presentation : ./greeter Bob
-activate Presentation
+User -> API : greeter.Execute(ctx, api.NewGreetCommand("Bob"))
+activate API
 
-Presentation -> Application : useCase.Execute(ctx, cmd)
+API -> Application : useCase.Execute(ctx, cmd)
 activate Application
 
 Application -> Infrastructure : writer.Write(ctx, "Hello, Bob!")
@@ -79,38 +86,28 @@ deactivate Domain
 Infrastructure --> Application : Error(InfrastructureError)
 deactivate Infrastructure
 
-Application --> Presentation : Error(InfrastructureError)
+Application --> API : Error(InfrastructureError)
 deactivate Application
 
-Presentation -> Presentation : result.IsError() == true
-Presentation -> Presentation : Extract ErrorInfo
-note right
-  ```go
-  domErr := result.ErrorInfo()
-  // domErr.Kind, domErr.Message
-  ```
-end note
+API --> User : api.Err(InfrastructureError)
+deactivate API
 
-Presentation -> Presentation : Pattern match ErrorKind
-note right
+note right of User
   ```go
-  switch domErr.Kind {
-  case apperr.InfrastructureError:
-    fmt.Fprintln(os.Stderr,
-      "A system error occurred.")
+  if result.IsError() {
+    errInfo := result.ErrorInfo()
+    // errInfo.Kind == api.InfrastructureError
+    // errInfo.Message == "write failed: ..."
   }
   ```
 end note
 
-Presentation --> User : "Error: write failed: ..."\nExit code 1
-deactivate Presentation
-
 == Error Path (Domain Validation) ==
 
-User -> Presentation : ./greeter ""
-activate Presentation
+User -> API : greeter.Execute(ctx, api.NewGreetCommand(""))
+activate API
 
-Presentation -> Application : useCase.Execute(ctx, cmd)
+API -> Application : useCase.Execute(ctx, cmd)
 activate Application
 
 Application -> Domain : valueobject.CreatePerson("")
@@ -127,30 +124,29 @@ end note
 Domain --> Application : Error(ValidationError)
 deactivate Domain
 
-Application --> Presentation : Error(ValidationError)
+Application --> API : Error(ValidationError)
 deactivate Application
 
-Presentation -> Presentation : Extract ErrorInfo
-Presentation -> Presentation : Pattern match
-note right
+API --> User : api.Err(ValidationError)
+deactivate API
+
+note right of User
   ```go
-  switch domErr.Kind {
-  case apperr.ValidationError:
-    fmt.Fprintln(os.Stderr,
-      "Please provide a valid name.")
+  switch result.ErrorInfo().Kind {
+  case api.ValidationError:
+    // Handle validation error
+  case api.InfrastructureError:
+    // Handle infra error
   }
   ```
 end note
 
-Presentation --> User : "Error: name cannot be empty"\nExit code 1
-deactivate Presentation
-
 == Context Cancellation Path ==
 
-User -> Presentation : ./greeter Alice\n(then Ctrl+C)
-activate Presentation
+User -> API : greeter.Execute(ctx, cmd)\n(ctx is cancelled)
+activate API
 
-Presentation -> Application : useCase.Execute(ctx, cmd)
+API -> Application : useCase.Execute(ctx, cmd)
 activate Application
 
 Application -> Infrastructure : writer.Write(ctx, message)
@@ -166,30 +162,30 @@ end note
 Infrastructure --> Application : Error(InfrastructureError:\n"write cancelled: context canceled")
 deactivate Infrastructure
 
-Application --> Presentation : Error(InfrastructureError)
+Application --> API : Error(InfrastructureError)
 deactivate Application
 
-Presentation --> User : "Error: write cancelled"\nExit code 1
-deactivate Presentation
+API --> User : api.Err(InfrastructureError)
+deactivate API
 
 legend right
-  **Error Handling Rules**
+  **Library Error Handling**
   ════════════════════════════════════
-  1. **Domain**: Validates, returns Error variant
-  2. **Application**: Orchestrates, propagates errors
-  3. **Infrastructure**: Catches panics via defer/recover,
-     checks context, converts to Error
-  4. **Presentation**: Pattern matches errors,
-     displays user-friendly messages
+  1. **Consumer**: Calls API, handles Result
+  2. **API/desktop**: Wires infrastructure,
+     delegates to UseCase
+  3. **Application**: Orchestrates, propagates errors
+  4. **Infrastructure**: Catches panics via
+     defer/recover, checks context
+  5. **Domain**: Validates, returns Error variant
 
   **Key Patterns**
   ════════════════════════════════════
   • Result[T] monad (not Go error interface)
   • Panic recovery at infrastructure boundary
   • Context cancellation support
-  • application/error for Presentation
-  • domain/error for Infrastructure
   • Railway-oriented programming
+  • Consumer pattern matches on ErrorKind
 
   **Static Dispatch**
   ════════════════════════════════════

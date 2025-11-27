@@ -1,17 +1,19 @@
 # Hybrid_Lib_Go Documentation Index
 
-**Version:** 1.0.0  
-**Date:** November 26, 2025  
-**SPDX-License-Identifier:** BSD-3-Clause  
-**License File:** See the LICENSE file in the project root.  
-**Copyright:** © 2025 Michael Gardner, A Bit of Help, Inc.  
-**Status:** Released  
+**Version:** 1.0.0
+**Date:** November 26, 2025
+**SPDX-License-Identifier:** BSD-3-Clause
+**License File:** See the LICENSE file in the project root.
+**Copyright:** (c) 2025 Michael Gardner, A Bit of Help, Inc.
+**Status:** Released
 
 ---
 
 ## Welcome
 
-Welcome to the **Hybrid_Lib_Go** documentation. This Go 1.23+ application starter demonstrates professional hexagonal architecture with functional programming principles, static dependency injection via generics, and railway-oriented error handling.
+Welcome to the **Hybrid_Lib_Go** documentation. This Go 1.23+ library demonstrates professional hexagonal architecture with functional programming principles, static dependency injection via generics, and railway-oriented error handling.
+
+This is a **library** template (not an application). It provides reusable business logic that consuming applications can import.
 
 ---
 
@@ -19,70 +21,73 @@ Welcome to the **Hybrid_Lib_Go** documentation. This Go 1.23+ application starte
 
 ### Getting Started
 
-- 🚀 **[Quick Start Guide](quick_start.md)** - Get up and running in minutes
+- **[Quick Start Guide](quick_start.md)** - Get up and running in minutes
   - Installation instructions
-  - First build and run
+  - Library usage
   - Understanding the architecture
-  - Making your first change
   - Running tests
 
 ### Formal Documentation
 
-- 📋 **[Software Requirements Specification (SRS)](formal/software_requirements_specification.md)** - Complete requirements
-  - Functional requirements (FR-01 through FR-12)
-  - Non-functional requirements (NFR-01 through NFR-06)
+- **[Software Requirements Specification (SRS)](formal/software_requirements_specification.md)** - Complete requirements
+  - Functional requirements
+  - Non-functional requirements
   - System constraints
-  - Test coverage mapping
 
-- 🏗️ **[Software Design Specification (SDS)](formal/software_design_specification.md)** - Architecture and design
-  - 5-layer hexagonal architecture
+- **[Software Design Specification (SDS)](formal/software_design_specification.md)** - Architecture and design
+  - 4-layer library hexagonal architecture
   - Static dependency injection via generics
   - Railway-oriented programming patterns
   - Component relationships
-  - Data flow diagrams
-  - Design patterns used
 
-- 🧪 **[Software Test Guide](formal/software_test_guide.md)** - Testing documentation
-  - Test organization (unit/integration/e2e)
-  - Running tests (make test, make test-all)
-  - Test framework documentation
+- **[Software Test Guide](formal/software_test_guide.md)** - Testing documentation
+  - Test organization (unit/integration)
+  - Running tests
   - Coverage procedures
-  - Writing new tests
 
 ### Development Guides
 
-- 🗺️ **[Architecture Mapping Guide](guides/architecture_mapping.md)** - Layer responsibilities
-- 🔌 **[Ports Mapping Guide](guides/ports_mapping.md)** - Port definitions and implementations
+- **[Architecture Mapping Guide](guides/architecture_mapping.md)** - Layer responsibilities
+- **[Ports Mapping Guide](guides/ports_mapping.md)** - Port definitions and implementations
 
 ---
 
 ## Architecture Overview
 
-Hybrid_Lib_Go implements a **5-layer hexagonal architecture** (also known as Ports and Adapters or Clean Architecture):
+Hybrid_Lib_Go implements a **4-layer library hexagonal architecture** (also known as Ports and Adapters or Clean Architecture):
 
 ### Layer Structure
 
 ```
 ┌─────────────────────────────────────────────┐
-│  Bootstrap                                  │  Composition Root (wiring)
-├─────────────────────────────────────────────┤
-│  Presentation                               │  Driving Adapters (CLI)
-├─────────────────────────────────────────────┤
-│  Application                                │  Use Cases + Ports
+│  API Layer (Public Facade)                  │  api/, api/desktop/
 ├─────────────────────────────────────────────┤
 │  Infrastructure                             │  Driven Adapters (Console Writer)
+├─────────────────────────────────────────────┤
+│  Application                                │  Use Cases + Ports
 ├─────────────────────────────────────────────┤
 │  Domain                                     │  Business Logic (ZERO dependencies)
 └─────────────────────────────────────────────┘
 ```
 
+### Library vs Application Architecture
+
+| Library (4 layers)       | Application (5 layers)      |
+|--------------------------|----------------------------|
+| api/                     | bootstrap/                 |
+| api/desktop/             | presentation/              |
+| infrastructure/          | infrastructure/            |
+| application/             | application/               |
+| domain/                  | domain/                    |
+
 ### Key Principles
 
 1. **Domain Isolation**: Domain layer has zero external dependencies
-2. **Presentation Boundary**: Presentation layer cannot access Domain directly (uses application/error re-exports)
-3. **Static Dispatch**: Dependency injection via generics (compile-time, zero overhead)
-4. **Railway-Oriented**: Result monads for error handling (no panics across boundaries)
-5. **Multi-Module Workspace**: go.work manages separate go.mod per layer
+2. **API Facade**: api/ re-exports types, does NOT import infrastructure
+3. **Platform Wiring**: api/desktop/ wires infrastructure to application
+4. **Static Dispatch**: Dependency injection via generics (compile-time, zero overhead)
+5. **Railway-Oriented**: Result monads for error handling (no panics across boundaries)
+6. **Multi-Module Workspace**: go.work manages separate go.mod per layer
 
 ---
 
@@ -92,8 +97,8 @@ Hybrid_Lib_Go implements a **5-layer hexagonal architecture** (also known as Por
 
 Located in `diagrams/` directory:
 
-- **layer_dependencies.svg** - Shows 5-layer dependency flow
-- **application_error_pattern.svg** - Re-export pattern for Presentation isolation
+- **layer_dependencies.svg** - Shows 4-layer library dependency flow
+- **application_error_pattern.svg** - Error handling patterns
 - **package_structure.svg** - Actual package hierarchy
 - **error_handling_flow.svg** - Error propagation through layers
 - **static_dispatch.svg** - Generic vs interface comparison
@@ -102,28 +107,49 @@ All diagrams are generated from PlantUML sources (.puml files).
 
 ---
 
-## Project Statistics
+## Library Usage
 
-### Code Metrics (v1.0.0)
+### Basic Usage
 
-- **Go Source Files**: 20 (.go)
-- **Test Files**: Unit, Integration, E2E suites
-- **Architecture Layers**: 5 (Domain, Application, Infrastructure, Presentation, Bootstrap)
-- **Build Targets**: 20+ Makefile targets
-- **Dependencies**: testify (test only), ZERO in domain layer
+```go
+import (
+    "context"
+    "github.com/abitofhelp/hybrid_lib_go/api"
+    "github.com/abitofhelp/hybrid_lib_go/api/desktop"
+)
 
-### Test Coverage
+func main() {
+    // Create a greeter with console output
+    greeter := desktop.NewGreeter()
 
-- **Unit Tests**: 42 assertions (Domain layer)
-- **Integration Tests**: 21 tests (CLI binary execution)
-- **E2E Tests**: 10 tests (Full system verification)
-- **Test Framework**: Custom lightweight framework + testify
+    // Execute greeting
+    ctx := context.Background()
+    result := greeter.Execute(ctx, api.NewGreetCommand("Alice"))
 
-### Code Quality
+    if result.IsOk() {
+        // Success - greeting was written to console
+    } else {
+        // Handle error
+        errInfo := result.ErrorInfo()
+        switch errInfo.Kind {
+        case api.ValidationError:
+            // Handle validation error
+        case api.InfrastructureError:
+            // Handle infrastructure error
+        }
+    }
+}
+```
 
-- **Compiler Warnings**: 0
-- **Architecture Validation**: Enforced by arch_guard.py
-- **Go Version**: 1.23+
+### Custom Writer
+
+```go
+// Use a custom writer for testing or other output destinations
+writer := &MockWriter{Buffer: &bytes.Buffer{}}
+greeter := desktop.GreeterWithWriter[*MockWriter](writer)
+result := greeter.Execute(ctx, api.NewGreetCommand("Bob"))
+output := writer.String() // "Hello, Bob!\n"
+```
 
 ---
 
@@ -144,9 +170,9 @@ type GreetUseCase[W WriterPort] struct {
     writer W
 }
 
-// Wiring in Bootstrap (compile-time resolution)
-consoleWriter := adapter.NewConsoleWriter()
-uc := usecase.NewGreetUseCase[*adapter.ConsoleWriter](consoleWriter)
+// Wiring in api/desktop (compile-time resolution)
+writer := adapter.NewConsoleWriter()
+uc := usecase.NewGreetUseCase[*adapter.ConsoleWriter](writer)
 ```
 
 **Benefits**:
@@ -173,29 +199,30 @@ func (uc *GreetUseCase[W]) Execute(ctx context.Context, cmd command.GreetCommand
 }
 ```
 
-**Benefits**:
-- Explicit error handling (compiler-enforced)
-- No unexpected control flow
-- Composable error types
+### API Facade Pattern
 
-### Application.Error Re-Export Pattern
-
-**Problem**: Presentation cannot access Domain directly
-**Solution**: Application re-exports Domain.Error for Presentation
+**Pattern**: api/ re-exports types from domain and application without importing infrastructure:
 
 ```go
-// application/error/error.go (zero-overhead type aliases)
-import domerr "github.com/abitofhelp/hybrid_lib_go/domain/error"
+// api/api.go - Public facade
+import (
+    "github.com/abitofhelp/hybrid_lib_go/application/command"
+    domerr "github.com/abitofhelp/hybrid_lib_go/domain/error"
+    "github.com/abitofhelp/hybrid_lib_go/domain/valueobject"
+)
 
-type ErrorType = domerr.ErrorType
-type ErrorKind = domerr.ErrorKind
+// Re-exported types
 type Result[T any] = domerr.Result[T]
+type Person = valueobject.Person
+type GreetCommand = command.GreetCommand
 
-var ValidationError = domerr.ValidationError
-var InfrastructureError = domerr.InfrastructureError
+// Factory functions
+func NewGreetCommand(name string) GreetCommand {
+    return command.NewGreetCommand(name)
+}
 ```
 
-This maintains clean boundaries while allowing Presentation to handle errors.
+Infrastructure is wired in platform-specific sub-packages (api/desktop/).
 
 ---
 
@@ -203,15 +230,20 @@ This maintains clean boundaries while allowing Presentation to handle errors.
 
 ```
 hybrid_lib_go/
+├── api/                       # Public facade
+│   ├── go.mod                 # Depends on application + domain (NOT infrastructure)
+│   ├── api.go                 # Re-exports types
+│   └── desktop/               # Platform-specific wiring
+│       ├── go.mod             # Depends on all layers
+│       └── desktop.go         # Creates ready-to-use greeter
 ├── domain/                    # Pure business logic
 │   ├── go.mod                 # ZERO external dependencies
 │   ├── error/                 # Result monad, error types
-│   ├── valueobject/           # Immutable value objects
-│   └── test/                  # Test framework
+│   └── valueobject/           # Immutable value objects
 ├── application/               # Use cases + ports
 │   ├── go.mod                 # Depends only on domain
 │   ├── command/               # Input DTOs
-│   ├── error/                 # Re-exports for Presentation
+│   ├── error/                 # Error helpers
 │   ├── model/                 # Output DTOs (Unit)
 │   ├── port/
 │   │   ├── inbound/           # Use case interfaces
@@ -220,18 +252,8 @@ hybrid_lib_go/
 ├── infrastructure/            # Adapters (driven)
 │   ├── go.mod                 # Depends on application + domain
 │   └── adapter/               # Console writer
-├── presentation/              # Adapters (driving)
-│   ├── go.mod                 # Depends only on application
-│   └── adapter/cli/command/   # CLI commands
-├── bootstrap/                 # Composition root
-│   ├── go.mod                 # Depends on all layers
-│   └── cli/                   # CLI wiring
-├── cmd/greeter/               # Main entry point
-│   ├── go.mod                 # Depends only on bootstrap
-│   └── main.go                # 3 lines
 ├── test/
-│   ├── integration/           # CLI integration tests
-│   └── e2e/                   # Full system tests
+│   └── integration/           # API integration tests
 ├── docs/
 │   ├── formal/                # SRS, SDS, Test Guide
 │   ├── diagrams/              # UML diagrams
@@ -253,17 +275,14 @@ hybrid_lib_go/
 
 **Building**:
 ```bash
-make build              # Development build
-make build-release      # Release build
-make rebuild            # Clean + build
+make build              # Build all modules
 ```
 
 **Testing**:
 ```bash
 make test               # Run unit tests
-make test-all           # Run all tests (unit + integration + e2e)
+make test-all           # Run all tests (unit + integration)
 make test-integration   # Integration tests only
-make test-e2e           # E2E tests only
 ```
 
 **Quality**:
@@ -272,32 +291,6 @@ make check-arch         # Architecture validation
 make fmt                # Format code
 make lint               # Run linter
 ```
-
-**Utilities**:
-```bash
-make clean              # Clean artifacts
-make run NAME=Alice     # Run application
-make help               # Show all targets
-```
-
----
-
-## Learning Path
-
-### For Beginners
-
-1. **Start Here**: [Quick Start Guide](quick_start.md)
-2. **Understand Architecture**: [Software Design Specification](formal/software_design_specification.md)
-3. **Run Tests**: `make test-all`
-4. **Explore Code**: Start with `bootstrap/cli/cli.go`
-5. **Read Examples**: Study how layers are wired together
-
-### For Experienced Developers
-
-1. **Architecture Patterns**: See [SDS - Design Patterns](formal/software_design_specification.md)
-2. **Static DI Deep Dive**: See diagrams/static_dispatch.svg
-3. **Railway-Oriented Programming**: See diagrams/error_handling_flow.svg
-4. **Add Use Case**: Follow pattern in existing code
 
 ---
 
@@ -309,7 +302,7 @@ make help               # Show all targets
 
 ### Development Dependencies
 
-- **testify** (v1.9.0): Testing assertions (test modules only)
+- **testify** (v1.11.1): Testing assertions (test module only)
 
 ### Build Requirements
 
@@ -320,41 +313,11 @@ make help               # Show all targets
 
 ---
 
-## Documentation Updates
-
-All documentation is maintained for v1.0.0 release:
-
-- **Copyright**: © 2025 Michael Gardner, A Bit of Help, Inc.
-- **License**: BSD-3-Clause
-- **Version**: 1.0.0
-- **Date**: November 25, 2025
-- **Status**: Released
-
-For documentation issues or suggestions, please file an issue on GitHub.
-
----
-
-## Support and Contributing
-
-### Getting Help
-
-- 🐛 **Issues**: [GitHub Issues](https://github.com/abitofhelp/hybrid_lib_go/issues)
-- 📖 **Documentation**: This directory
-
-### Contributing
-
-We welcome contributions! See:
-
-- Code style enforced by architecture validation
-- Run `make test-all` before submitting
-
----
-
 ## License
 
 Hybrid_Lib_Go is licensed under the **BSD-3-Clause License**.
 
-Copyright © 2025 Michael Gardner, A Bit of Help, Inc.
+Copyright (c) 2025 Michael Gardner, A Bit of Help, Inc.
 
 See [LICENSE](../LICENSE) for full license text.
 
@@ -368,4 +331,4 @@ See [LICENSE](../LICENSE) for full license text.
 
 ---
 
-**Last Updated**: November 25, 2025
+**Last Updated**: November 26, 2025

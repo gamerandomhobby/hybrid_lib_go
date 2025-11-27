@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ==============================================================================
-# conftest.py - Pytest Configuration and Shared Fixtures
+# conftest.py - Pytest Configuration and Shared Fixtures (LIBRARY)
 # ==============================================================================
 # Copyright (c) 2025 Michael Gardner, A Bit of Help, Inc.
 # SPDX-License-Identifier: BSD-3-Clause
@@ -10,8 +10,14 @@ Pytest configuration and shared fixtures for Python script testing.
 
 Provides:
 - Path configuration to import scripts under test
-- Shared fixtures for temporary Go project directories
+- Shared fixtures for temporary Go LIBRARY project directories
 - Common test utilities for Go architecture validation
+
+LIBRARY ARCHITECTURE (4 layers):
+- domain: ZERO dependencies
+- application: imports domain only
+- infrastructure: imports application, domain
+- api: imports application, domain (NOT infrastructure)
 """
 
 import sys
@@ -57,11 +63,97 @@ def invalid_fixtures_dir(fixtures_dir) -> Path:
 
 
 @pytest.fixture
+def temp_go_lib_project(tmp_path):
+    """
+    Create a temporary Go LIBRARY project structure for testing.
+
+    LIBRARY architecture has 4 layers (no presentation/bootstrap):
+        - root: Project root
+        - domain: Domain layer
+        - application: Application layer
+        - infrastructure: Infrastructure layer
+        - api: API facade layer
+
+    Returns a dictionary with paths to each layer.
+    """
+    root = tmp_path / "project"
+
+    dirs = {
+        "root": root,
+        "domain": root / "domain",
+        "application": root / "application",
+        "infrastructure": root / "infrastructure",
+        "api": root / "api",
+    }
+
+    # Create all directories
+    for directory in dirs.values():
+        directory.mkdir(parents=True, exist_ok=True)
+
+    # Create root go.mod
+    (root / "go.mod").write_text("module github.com/test/project\n\ngo 1.23\n")
+
+    # Create layer go.mod files
+    for layer in ["domain", "application", "infrastructure", "api"]:
+        layer_gomod = dirs[layer] / "go.mod"
+        layer_gomod.write_text(f"module github.com/test/project/{layer}\n\ngo 1.23\n")
+
+    return dirs
+
+
+@pytest.fixture
+def prod_go_lib_project(tmp_path):
+    """
+    Create a production Go LIBRARY project structure WITHOUT 'test' in path.
+
+    This is specifically for testing validations that skip test paths.
+    Uses a temporary directory that doesn't contain 'test' in the path.
+
+    LIBRARY architecture has 4 layers (no presentation/bootstrap).
+    """
+    import tempfile
+    import atexit
+    import shutil
+
+    # Create temp dir with 'prod' prefix to avoid 'test' in path
+    temp_dir = Path(tempfile.mkdtemp(prefix="prod_"))
+
+    # Ensure cleanup
+    def cleanup():
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir)
+    atexit.register(cleanup)
+
+    dirs = {
+        "root": temp_dir,
+        "domain": temp_dir / "domain",
+        "application": temp_dir / "application",
+        "infrastructure": temp_dir / "infrastructure",
+        "api": temp_dir / "api",
+    }
+
+    # Create all directories
+    for directory in dirs.values():
+        directory.mkdir(parents=True, exist_ok=True)
+
+    # Create root go.mod
+    (temp_dir / "go.mod").write_text("module github.com/test/project\n\ngo 1.23\n")
+
+    # Create layer go.mod files
+    for layer in ["domain", "application", "infrastructure", "api"]:
+        layer_gomod = dirs[layer] / "go.mod"
+        layer_gomod.write_text(f"module github.com/test/project/{layer}\n\ngo 1.23\n")
+
+    return dirs
+
+
+# Legacy fixtures for APP architecture (kept for backwards compatibility)
+@pytest.fixture
 def temp_go_project(tmp_path):
     """
-    Create a temporary Go project structure for testing.
+    Create a temporary Go APP project structure for testing.
 
-    Returns a dictionary with paths:
+    APP architecture has 5 layers:
         - root: Project root
         - domain: Domain layer
         - application: Application layer
@@ -99,7 +191,7 @@ def temp_go_project(tmp_path):
 @pytest.fixture
 def prod_go_project(tmp_path):
     """
-    Create a production Go project structure WITHOUT 'test' in path.
+    Create a production Go APP project structure WITHOUT 'test' in path.
 
     This is specifically for testing validations that skip test paths.
     Uses a temporary directory that doesn't contain 'test' in the path.

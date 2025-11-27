@@ -3,291 +3,190 @@
 
 //go:build integration
 
-// Package integration provides CLI integration tests.
+// Package integration provides API integration tests.
 //
-// Integration tests verify the complete application flow by running
-// the actual greeter binary and checking stdout, stderr, and exit codes.
+// Integration tests verify the complete library flow through the public API.
+// They test:
+// - API facade usage
+// - Factory functions
+// - Error handling
+// - Result monad operations
 //
 // Run with: go test -v -tags=integration ./test/integration/...
-//
-// Prerequisites:
-//   - Build the greeter binary first: go build -o greeter ./cmd/greeter
 package integration
 
 import (
 	"bytes"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
-	"sync/atomic"
+	"context"
 	"testing"
 
-	"github.com/abitofhelp/hybrid_lib_go/domain/test"
+	"github.com/abitofhelp/hybrid_lib_go/api"
+	"github.com/abitofhelp/hybrid_lib_go/api/desktop"
+	"github.com/abitofhelp/hybrid_lib_go/application/model"
+	domerr "github.com/abitofhelp/hybrid_lib_go/domain/error"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// Test tracking for summary.
-var (
-	testCount   int32
-	passedCount int32
-)
 
-// registerTest tracks a test and its outcome for the final summary.
-// Call at the start of each test function or subtest.
-func registerTest(t *testing.T) {
-	atomic.AddInt32(&testCount, 1)
-	t.Cleanup(func() {
-		if !t.Failed() {
-			atomic.AddInt32(&passedCount, 1)
-		}
-	})
+// ============================================================================
+// Mock Writer for Testing
+// ============================================================================
+
+// MockWriter captures output for testing.
+type MockWriter struct {
+	Buffer bytes.Buffer
 }
 
-// greeterPath is the path to the greeter binary.
-// Set during TestMain.
-var greeterPath string
+// Write implements outbound.WriterPort.
+func (w *MockWriter) Write(ctx context.Context, msg string) domerr.Result[model.Unit] {
+	w.Buffer.WriteString(msg)
+	return domerr.Ok(model.Unit{})
+}
 
-// TestMain builds the greeter binary before running tests.
-func TestMain(m *testing.M) {
-	// Build the greeter binary
-	projectRoot := findProjectRoot()
-	greeterPath = filepath.Join(projectRoot, "greeter_test_binary")
+// String returns the captured output.
+func (w *MockWriter) String() string {
+	return w.Buffer.String()
+}
 
-	cmd := exec.Command("go", "build", "-o", greeterPath, "./cmd/greeter")
-	cmd.Dir = projectRoot
-	if output, err := cmd.CombinedOutput(); err != nil {
-		panic("Failed to build greeter: " + err.Error() + "\n" + string(output))
+// ============================================================================
+// API Facade Tests
+// ============================================================================
+
+func TestGreeter_Execute_Success(t *testing.T) {
+	// Arrange: Create greeter with mock writer
+	writer := &MockWriter{}
+	greeter := desktop.GreeterWithWriter[*MockWriter](writer)
+	cmd := api.NewGreetCommand("Alice")
+	ctx := context.Background()
+
+	// Act
+	result := greeter.Execute(ctx, cmd)
+
+	// Assert
+	require.True(t, result.IsOk(), "Expected successful result")
+	assert.Contains(t, writer.String(), "Hello, Alice!")
+}
+
+func TestGreeter_Execute_EmptyName_ReturnsValidationError(t *testing.T) {
+	// Arrange
+	writer := &MockWriter{}
+	greeter := desktop.GreeterWithWriter[*MockWriter](writer)
+	cmd := api.NewGreetCommand("")
+	ctx := context.Background()
+
+	// Act
+	result := greeter.Execute(ctx, cmd)
+
+	// Assert
+	require.True(t, result.IsError(), "Expected validation error")
+	errInfo := result.ErrorInfo()
+	assert.Equal(t, api.ValidationError, errInfo.Kind)
+}
+
+func TestGreeter_Execute_LongName_ReturnsValidationError(t *testing.T) {
+	// Arrange
+	writer := &MockWriter{}
+	greeter := desktop.GreeterWithWriter[*MockWriter](writer)
+	longName := make([]byte, api.MaxNameLength+1)
+	for i := range longName {
+		longName[i] = 'a'
+	}
+	cmd := api.NewGreetCommand(string(longName))
+	ctx := context.Background()
+
+	// Act
+	result := greeter.Execute(ctx, cmd)
+
+	// Assert
+	require.True(t, result.IsError(), "Expected validation error for long name")
+	errInfo := result.ErrorInfo()
+	assert.Equal(t, api.ValidationError, errInfo.Kind)
+}
+
+// ============================================================================
+// Domain Type Re-export Tests
+// ============================================================================
+
+func TestAPI_CreatePerson_Success(t *testing.T) {
+	// Act
+	result := api.CreatePerson("Bob")
+
+	// Assert
+	require.True(t, result.IsOk())
+	person := result.Value()
+	assert.Equal(t, "Bob", person.GetName())
+}
+
+func TestAPI_CreatePerson_EmptyName_ReturnsError(t *testing.T) {
+	// Act
+	result := api.CreatePerson("")
+
+	// Assert
+	require.True(t, result.IsError())
+	assert.Equal(t, api.ValidationError, result.ErrorInfo().Kind)
+}
+
+func TestAPI_Result_Ok(t *testing.T) {
+	// Act
+	result := api.Ok("success")
+
+	// Assert
+	require.True(t, result.IsOk())
+	assert.Equal(t, "success", result.Value())
+}
+
+func TestAPI_Result_Err(t *testing.T) {
+	// Arrange
+	err := api.ErrorType{
+		Kind:    api.ValidationError,
+		Message: "test error",
 	}
 
-	// Run tests
-	code := m.Run()
+	// Act
+	result := api.Err[string](err)
 
-	// Cleanup
-	os.Remove(greeterPath)
-
-	// Print summary banner
-	test.PrintCategorySummary("INTEGRATION TESTS",
-		int(atomic.LoadInt32(&testCount)),
-		int(atomic.LoadInt32(&passedCount)))
-
-	os.Exit(code)
-}
-
-// findProjectRoot finds the project root directory.
-func findProjectRoot() string {
-	// Start from current directory and walk up
-	dir, _ := os.Getwd()
-	for {
-		// Check if this directory has cmd/greeter
-		if _, err := os.Stat(filepath.Join(dir, "cmd", "greeter")); err == nil {
-			return dir
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-	// Fallback: assume we're in test/integration
-	abs, _ := filepath.Abs(filepath.Join("..", ".."))
-	return abs
-}
-
-// runGreeter executes the greeter binary with the given args.
-func runGreeter(args ...string) (stdout, stderr string, exitCode int) {
-	cmd := exec.Command(greeterPath, args...)
-
-	var stdoutBuf, stderrBuf bytes.Buffer
-	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
-
-	err := cmd.Run()
-
-	stdout = stdoutBuf.String()
-	stderr = stderrBuf.String()
-
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
-		} else {
-			exitCode = -1
-		}
-	}
-
-	return
+	// Assert
+	require.True(t, result.IsError())
+	assert.Equal(t, "test error", result.ErrorInfo().Message)
 }
 
 // ============================================================================
-// Valid Input Tests
+// Console Greeter Tests (writes to stdout)
 // ============================================================================
 
-func TestGreeter_ValidName_Success(t *testing.T) {
-	registerTest(t)
-	stdout, stderr, exitCode := runGreeter("Alice")
+func TestDesktop_NewGreeter_Success(t *testing.T) {
+	// This test verifies the default console greeter works.
+	// Note: Output goes to stdout, can't easily capture here.
+	greeter := desktop.NewGreeter()
+	require.NotNil(t, greeter, "NewGreeter should return non-nil")
 
-	assert.Equal(t, 0, exitCode, "exit code should be 0")
-	assert.Equal(t, "Hello, Alice!\n", stdout, "stdout should contain greeting")
-	assert.Empty(t, stderr, "stderr should be empty")
-}
+	// Execute - will print to console
+	cmd := api.NewGreetCommand("IntegrationTest")
+	ctx := context.Background()
+	result := greeter.Execute(ctx, cmd)
 
-func TestGreeter_NameWithSpaces_Success(t *testing.T) {
-	registerTest(t)
-	stdout, stderr, exitCode := runGreeter("Bob Smith")
-
-	assert.Equal(t, 0, exitCode, "exit code should be 0")
-	assert.Equal(t, "Hello, Bob Smith!\n", stdout, "stdout should contain full name")
-	assert.Empty(t, stderr, "stderr should be empty")
-}
-
-func TestGreeter_UnicodeCharacters_Success(t *testing.T) {
-	registerTest(t)
-	stdout, stderr, exitCode := runGreeter("José García")
-
-	assert.Equal(t, 0, exitCode, "exit code should be 0")
-	assert.Equal(t, "Hello, José García!\n", stdout, "stdout should contain unicode name")
-	assert.Empty(t, stderr, "stderr should be empty")
-}
-
-func TestGreeter_SingleCharacter_Success(t *testing.T) {
-	registerTest(t)
-	stdout, stderr, exitCode := runGreeter("X")
-
-	assert.Equal(t, 0, exitCode, "exit code should be 0")
-	assert.Equal(t, "Hello, X!\n", stdout, "stdout should contain single char greeting")
-	assert.Empty(t, stderr, "stderr should be empty")
-}
-
-func TestGreeter_MaxLengthName_Success(t *testing.T) {
-	registerTest(t)
-	// MaxNameLength is 100 characters
-	maxName := strings.Repeat("a", 100)
-	stdout, stderr, exitCode := runGreeter(maxName)
-
-	assert.Equal(t, 0, exitCode, "exit code should be 0")
-	assert.Contains(t, stdout, "Hello, "+maxName+"!", "stdout should contain max length greeting")
-	assert.Empty(t, stderr, "stderr should be empty")
+	assert.True(t, result.IsOk(), "Console greeter should succeed")
 }
 
 // ============================================================================
-// Invalid Input Tests
+// Multiple Names Test
 // ============================================================================
 
-func TestGreeter_NoArguments_ShowsUsage(t *testing.T) {
-	registerTest(t)
-	stdout, stderr, exitCode := runGreeter()
+func TestGreeter_Execute_MultipleNames(t *testing.T) {
+	names := []string{"Alice", "Bob", "Charlie", "世界", "مرحبا"}
 
-	assert.Equal(t, 1, exitCode, "exit code should be 1")
-	assert.Empty(t, stdout, "stdout should be empty")
-	assert.Contains(t, stderr, "Usage:", "stderr should contain usage")
-}
+	for _, name := range names {
+		t.Run(name, func(t *testing.T) {
+			writer := &MockWriter{}
+			greeter := desktop.GreeterWithWriter[*MockWriter](writer)
+			cmd := api.NewGreetCommand(name)
+			ctx := context.Background()
 
-func TestGreeter_TooManyArguments_ShowsUsage(t *testing.T) {
-	registerTest(t)
-	stdout, stderr, exitCode := runGreeter("Alice", "Bob")
+			result := greeter.Execute(ctx, cmd)
 
-	assert.Equal(t, 1, exitCode, "exit code should be 1")
-	assert.Empty(t, stdout, "stdout should be empty")
-	assert.Contains(t, stderr, "Usage:", "stderr should contain usage")
-}
-
-func TestGreeter_EmptyName_ValidationError(t *testing.T) {
-	registerTest(t)
-	stdout, stderr, exitCode := runGreeter("")
-
-	assert.Equal(t, 1, exitCode, "exit code should be 1")
-	assert.Empty(t, stdout, "stdout should be empty")
-	assert.Contains(t, stderr, "Error:", "stderr should contain error")
-	assert.Contains(t, stderr, "valid name", "stderr should mention valid name")
-}
-
-func TestGreeter_NameTooLong_ValidationError(t *testing.T) {
-	registerTest(t)
-	// MaxNameLength is 100, so 101 should fail
-	longName := strings.Repeat("x", 101)
-	stdout, stderr, exitCode := runGreeter(longName)
-
-	assert.Equal(t, 1, exitCode, "exit code should be 1")
-	assert.Empty(t, stdout, "stdout should be empty")
-	assert.Contains(t, stderr, "Error:", "stderr should contain error")
-}
-
-// ============================================================================
-// Edge Case Tests
-// ============================================================================
-
-func TestGreeter_WhitespaceOnlyName_ValidationError(t *testing.T) {
-	registerTest(t)
-	// Name with only whitespace should still be valid (preserved as-is)
-	// Based on the Ada design: "whitespace is preserved exactly as provided"
-	stdout, stderr, exitCode := runGreeter("   ")
-
-	assert.Equal(t, 0, exitCode, "exit code should be 0 (whitespace preserved)")
-	assert.Contains(t, stdout, "Hello,    !", "stdout should contain whitespace greeting")
-	assert.Empty(t, stderr, "stderr should be empty")
-}
-
-func TestGreeter_SpecialCharacters_Success(t *testing.T) {
-	registerTest(t)
-	stdout, stderr, exitCode := runGreeter("O'Connor")
-
-	assert.Equal(t, 0, exitCode, "exit code should be 0")
-	assert.Equal(t, "Hello, O'Connor!\n", stdout, "stdout should contain special chars")
-	assert.Empty(t, stderr, "stderr should be empty")
-}
-
-// ============================================================================
-// Table-Driven Tests
-// ============================================================================
-
-func TestGreeter_ValidNames_TableDriven(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{"simple name", "Alice", "Hello, Alice!\n"},
-		{"name with space", "John Doe", "Hello, John Doe!\n"},
-		{"unicode name", "北京", "Hello, 北京!\n"},
-		{"emoji name", "🎉", "Hello, 🎉!\n"},
-		{"hyphenated name", "Mary-Jane", "Hello, Mary-Jane!\n"},
-		{"name with numbers", "User123", "Hello, User123!\n"},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			registerTest(t)
-			stdout, stderr, exitCode := runGreeter(tc.input)
-
-			require.Equal(t, 0, exitCode, "exit code should be 0")
-			assert.Equal(t, tc.expected, stdout)
-			assert.Empty(t, stderr)
-		})
-	}
-}
-
-func TestGreeter_InvalidInputs_TableDriven(t *testing.T) {
-	tests := []struct {
-		name           string
-		args           []string
-		expectExitCode int
-		expectInStderr string
-	}{
-		{"no args", []string{}, 1, "Usage:"},
-		{"too many args", []string{"a", "b"}, 1, "Usage:"},
-		{"empty string", []string{""}, 1, "Error:"},
-		{"name too long", []string{strings.Repeat("x", 101)}, 1, "Error:"},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			registerTest(t)
-			stdout, stderr, exitCode := runGreeter(tc.args...)
-
-			assert.Equal(t, tc.expectExitCode, exitCode)
-			assert.Empty(t, stdout)
-			assert.Contains(t, stderr, tc.expectInStderr)
+			require.True(t, result.IsOk(), "Should succeed for name: %s", name)
+			assert.Contains(t, writer.String(), name)
 		})
 	}
 }
