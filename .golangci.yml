@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2025 Michael Gardner, A Bit of Help, Inc.
+
+version: "2"
+
+linters:
+  enable:
+    - errcheck       # Check error handling
+    - govet          # Examine Go source code
+    - staticcheck    # Advanced static analysis
+    - gosec          # Security issues
+    - ineffassign    # Detect ineffectual assignments
+    - unused         # Find unused code
+    - misspell       # Spelling errors
+    - revive         # Fast, configurable linter
+
+formatters:
+  enable:
+    - gofmt          # Format code
+    - goimports      # Organize imports
+
+linters-settings:
+  errcheck:
+    check-blank: true
+    check-type-assertions: true
+
+  govet:
+    enable-all: true
+
+  revive:
+    rules:
+      - name: exported
+        severity: warning
+        disabled: false
+      - name: package-comments
+        severity: warning
+        disabled: false
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+run:
+  timeout: 5m
+  tests: true
