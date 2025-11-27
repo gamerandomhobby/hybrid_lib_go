@@ -1,9 +1,9 @@
 # Hybrid_Lib_Go - Go Library with Hexagonal Architecture
 
-**Version:** 1.0.0
-**Date:** November 26, 2025
-**Copyright:** (c) 2025 Michael Gardner, A Bit of Help, Inc.
-**License:** BSD-3-Clause
+**Version:** 1.0.0  
+**Date:** November 26, 2025  
+**Copyright:** (c) 2025 Michael Gardner, A Bit of Help, Inc.  
+**License:** BSD-3-Clause  
 
 ## Overview
 
