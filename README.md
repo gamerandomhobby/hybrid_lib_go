@@ -1,9 +1,6 @@
-# Hybrid_Lib_Go - Go Library with Hexagonal Architecture
+# Library with Hexagonal Architecture
 
-**Version:** 1.0.0  
-**Date:** November 26, 2025  
-**Copyright:** (c) 2025 Michael Gardner, A Bit of Help, Inc.  
-**License:** BSD-3-Clause  
+[![License](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](LICENSE) [![Go](https://img.shields.io/badge/Go-1.23+-00ADD8.svg)](https://go.dev)
 
 ## Overview
 
@@ -18,6 +15,17 @@ This is a **reusable library** showcasing:
 - **Railway-Oriented Programming** with Result monads (no panics across boundaries)
 - **API Facade Pattern** for clean public interface
 - **Multi-Module Workspace** (compiler-enforced boundaries)
+
+## Features
+
+- ✅ 4-layer hexagonal architecture (Domain, Application, Infrastructure, API)
+- ✅ Custom domain Result monads (ZERO external dependencies)
+- ✅ Static dispatch via generics (zero-overhead DI)
+- ✅ API facade pattern for clean public interface
+- ✅ Module boundary enforcement via go.mod
+- ✅ Composition root pattern (`api/adapter/desktop`)
+- ✅ Custom writer support for testing
+- ✅ Comprehensive Makefile automation
 
 ## Architecture
 
@@ -61,7 +69,25 @@ hybrid_lib_go/
 - **Domain** has ZERO external dependencies
 - All dependencies flow INWARD toward Domain
 
-### Library Usage
+## Quick Start
+
+### Prerequisites
+
+- **Go 1.23+** (for workspace and generics support)
+- **Make** (for build automation)
+- **Python 3** (optional, for architecture validation)
+
+### Building
+
+```bash
+# Build all library modules
+make build
+
+# Clean artifacts
+make clean
+```
+
+### Running
 
 **Basic Usage (with convenience component):**
 
@@ -94,6 +120,8 @@ func main() {
 }
 ```
 
+## Usage
+
 **Custom Writer (for testing or different output):**
 
 ```go
@@ -118,113 +146,9 @@ func main() {
 }
 ```
 
-### Dependency Injection Pattern
+### API Reference
 
-**Static Dispatch via Generics:**
-
-```go
-// Port interface defines the contract
-type WriterPort interface {
-    Write(ctx context.Context, message string) domerr.Result[model.Unit]
-}
-
-// Generic use case with interface constraint
-type GreetUseCase[W outbound.WriterPort] struct {
-    writer W
-}
-
-// api/adapter/desktop wires with concrete types
-func NewGreeter() *Greeter {
-    writer := adapter.NewConsoleWriter()
-    uc := usecase.NewGreetUseCase[*adapter.ConsoleWriter](writer)
-    return &Greeter{useCase: uc}
-}
-```
-
-**Benefits:**
-- Zero runtime overhead (no vtable lookups)
-- Type-safe (verified at compile time)
-- Static dispatch (compiler knows exact types)
-- Inlining potential (optimizer can inline method calls)
-
-## Error Handling: Railway-Oriented Programming
-
-**NO PANICS across layer boundaries.** All errors propagate via domain Result monad:
-
-```go
-// Domain defines custom Result[T] monad (ZERO external dependencies)
-func Execute(cmd GreetCommand) domerr.Result[model.Unit] {
-    personResult := valueobject.CreatePerson(cmd.Name())
-
-    if personResult.IsError() {
-        return domerr.Err[model.Unit](personResult.ErrorInfo())
-    }
-
-    person := personResult.Value()
-    return writer.Write(ctx, person.GreetingMessage())
-}
-```
-
-**Error Types:**
-- `ValidationError` - Invalid input (empty name, name too long)
-- `InfrastructureError` - I/O failures, system errors
-
-## Building
-
-### Prerequisites
-
-- **Go 1.23+** (for workspace and generics support)
-- **Make** (for build automation)
-- **Python 3** (optional, for architecture validation)
-
-### Build Commands
-
-```bash
-# Build all library modules
-make build
-
-# Run all tests (unit + integration)
-make test
-
-# Run unit tests only
-make test-unit
-
-# Run integration tests
-make test-integration
-
-# Validate architecture boundaries
-make check-arch
-
-# Format code
-make fmt
-
-# Run linter
-make lint
-
-# Clean artifacts
-make clean
-```
-
-## Testing
-
-```bash
-# Run all tests
-make test-all
-
-# Run with coverage
-make test-coverage
-
-# Run specific test
-go test -v -run TestGreeter_Execute_Success ./test/integration/...
-```
-
-**Test Structure:**
-- **Unit tests**: Co-located with code (`*_test.go`)
-- **Integration tests**: `test/integration/` with `//go:build integration` tag
-
-## API Reference
-
-### Types (via `api` package)
+**Types (via `api` package):**
 
 | Type | Description |
 |------|-------------|
@@ -236,15 +160,7 @@ go test -v -run TestGreeter_Execute_Success ./test/integration/...
 | `WriterPort` | Output port interface |
 | `Unit` | Void return type |
 
-### Constants
-
-| Constant | Description |
-|----------|-------------|
-| `api.ValidationError` | Error kind for validation failures |
-| `api.InfrastructureError` | Error kind for I/O failures |
-| `api.MaxNameLength` | Maximum allowed name length (100) |
-
-### Functions
+**Functions:**
 
 | Function | Description |
 |----------|-------------|
@@ -255,24 +171,51 @@ go test -v -run TestGreeter_Execute_Success ./test/integration/...
 | `desktop.NewGreeter()` | Create ready-to-use greeter |
 | `desktop.GreeterWithWriter(w)` | Create greeter with custom writer |
 
-## Module Boundaries
+## Testing
 
-**Enforced by go.mod dependencies:**
+```bash
+# Run all tests (unit + integration)
+make test
 
-- **domain**: ZERO external dependencies (custom Result types)
-- **application**: domain ONLY
-- **infrastructure**: application + domain
-- **api**: application + domain (NOT infrastructure)
-- **api/adapter/desktop**: ALL modules (composition root)
+# Run unit tests only
+make test-unit
 
-**Compiler enforces these rules** - attempting to import forbidden packages results in build errors.
+# Run integration tests
+make test-integration
+
+# Run with coverage
+make test-coverage
+
+# Validate architecture boundaries
+make check-arch
+```
+
+**Test Structure:**
+- **Unit tests**: Co-located with code (`*_test.go`)
+- **Integration tests**: `test/integration/` with `//go:build integration` tag
 
 ## Documentation
 
-- **[Quick Start Guide](docs/quick_start.md)** - Get up and running
-- **[Documentation Index](docs/index.md)** - All documentation links
-- **[Software Design Specification](docs/formal/software_design_specification.md)** - Architecture details
-- **[Architecture Diagrams](docs/diagrams/)** - Visual documentation
+- 📚 **[Quick Start Guide](docs/quick_start.md)** - Get up and running
+- 📖 **[Documentation Index](docs/index.md)** - All documentation links
+- 🏗️ **[Software Design Specification](docs/formal/software_design_specification.md)** - Architecture details
+- 🎨 **[Architecture Diagrams](docs/diagrams/)** - Visual documentation
+
+## Code Standards
+
+This project follows:
+- **Go Language Standards** (`~/.claude/agents/go.md`)
+- **Architecture Standards** (`~/.claude/agents/architecture.md`)
+- **Functional Programming Standards** (`~/.claude/agents/functional.md`)
+
+### Key Standards Applied
+
+1. **SPDX Headers:** All `.go` files have SPDX license headers
+2. **Result Monads:** All fallible operations return `Result[T]`
+3. **No Panics:** Errors are values, recovery patterns at boundaries
+4. **Module Boundaries:** Compiler-enforced via go.mod
+5. **Static Dispatch:** Generic types with interface constraints
+6. **API Facade:** Clean public interface via api/ package
 
 ## Creating a New Project
 
@@ -296,28 +239,44 @@ python3 -m brand_project \
 - All `go.mod` module paths
 - Import statements in Go source files
 
-## Standards Compliance
+## Contributing
 
-This project follows:
-- **Go Language Standards** (`~/.claude/agents/go.md`)
-- **Architecture Standards** (`~/.claude/agents/architecture.md`)
-- **Functional Programming Standards** (`~/.claude/agents/functional.md`)
+This project is not open to external contributions at this time.
 
-### Key Standards Applied
+## AI Assistance & Authorship
 
-1. **SPDX Headers:** All `.go` files have SPDX license headers
-2. **Result Monads:** All fallible operations return `Result[T]`
-3. **No Panics:** Errors are values, recovery patterns at boundaries
-4. **Module Boundaries:** Compiler-enforced via go.mod
-5. **Static Dispatch:** Generic types with interface constraints
-6. **API Facade:** Clean public interface via api/ package
+This project — including its source code, tests, documentation, and other deliverables — is designed, implemented, and maintained by human developers, with Michael Gardner as the Principal Software Engineer and project lead.
+
+We use AI coding assistants (such as OpenAI GPT models and Anthropic Claude Code) as part of the development workflow to help with:
+
+- drafting and refactoring code and tests,
+- exploring design and implementation alternatives,
+- generating or refining documentation and examples,
+- and performing tedious and error-prone chores.
+
+AI systems are treated as tools, not authors. All changes are reviewed, adapted, and integrated by the human maintainers, who remain fully responsible for the architecture, correctness, and licensing of this project.
 
 ## License
 
-BSD-3-Clause - See LICENSE file in project root.
+Copyright © 2025 Michael Gardner, A Bit of Help, Inc.
+
+Licensed under the BSD-3-Clause License. See [LICENSE](LICENSE) for details.
 
 ## Author
 
 Michael Gardner
 A Bit of Help, Inc.
 https://github.com/abitofhelp
+
+## Project Status
+
+**Status**: Production Ready (v1.0.0)
+
+- ✅ 4-layer hexagonal architecture
+- ✅ Custom domain Result monads (ZERO external dependencies)
+- ✅ Static dispatch via generics (zero-overhead DI)
+- ✅ API facade pattern for clean public interface
+- ✅ Module boundary enforcement via go.mod
+- ✅ Composition root pattern
+- ✅ Custom writer support for testing
+- ✅ Comprehensive Makefile automation
