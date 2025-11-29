@@ -10,7 +10,7 @@
 // Architecture Notes:
 //   - Part of the DOMAIN layer (innermost, zero external dependencies (stdlib only)
 //   - Error types are concrete (not generic) for consistency
-//   - Used with mo.Result[T] monad for functional error handling
+//   - Used with domain Result[T] monad for functional error handling
 //
 // Usage:
 //

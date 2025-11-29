@@ -38,7 +38,15 @@ type MockWriter struct {
 }
 
 // Write implements outbound.WriterPort.
+// Checks context cancellation like a proper adapter should.
 func (w *MockWriter) Write(ctx context.Context, msg string) domerr.Result[model.Unit] {
+	// Check context cancellation (mirrors ConsoleWriter behavior)
+	select {
+	case <-ctx.Done():
+		return domerr.Err[model.Unit](domerr.NewInfrastructureError(
+			"write cancelled: " + ctx.Err().Error()))
+	default:
+	}
 	w.Buffer.WriteString(msg)
 	return domerr.Ok(model.Unit{})
 }
@@ -46,6 +54,16 @@ func (w *MockWriter) Write(ctx context.Context, msg string) domerr.Result[model.
 // String returns the captured output.
 func (w *MockWriter) String() string {
 	return w.Buffer.String()
+}
+
+// FailingWriter always returns an InfrastructureError for testing error paths.
+type FailingWriter struct {
+	ErrorMessage string
+}
+
+// Write implements outbound.WriterPort but always fails.
+func (w *FailingWriter) Write(ctx context.Context, msg string) domerr.Result[model.Unit] {
+	return domerr.Err[model.Unit](domerr.NewInfrastructureError(w.ErrorMessage))
 }
 
 // ============================================================================
@@ -188,4 +206,47 @@ func TestGreeter_Execute_MultipleNames(t *testing.T) {
 			assert.Contains(t, writer.String(), name)
 		})
 	}
+}
+
+// ============================================================================
+// Infrastructure Error Tests (Negative Path)
+// ============================================================================
+
+func TestGreeter_Execute_FailingWriter_ReturnsInfrastructureError(t *testing.T) {
+	// Arrange: Create greeter with a writer that always fails
+	writer := &FailingWriter{ErrorMessage: "simulated I/O failure"}
+	greeter := desktop.GreeterWithWriter[*FailingWriter](writer)
+	cmd := api.NewGreetCommand("Alice")
+	ctx := context.Background()
+
+	// Act
+	result := greeter.Execute(ctx, cmd)
+
+	// Assert: Should return InfrastructureError from the failing writer
+	require.True(t, result.IsError(), "Expected infrastructure error from failing writer")
+	errInfo := result.ErrorInfo()
+	assert.Equal(t, api.InfrastructureError, errInfo.Kind,
+		"Expected InfrastructureError kind")
+	assert.Contains(t, errInfo.Message, "simulated I/O failure",
+		"Error message should contain the failure reason")
+}
+
+func TestGreeter_Execute_CancelledContext_ReturnsError(t *testing.T) {
+	// Arrange: Create a cancelled context
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	writer := &MockWriter{}
+	greeter := desktop.GreeterWithWriter[*MockWriter](writer)
+	cmd := api.NewGreetCommand("Alice")
+
+	// Act
+	result := greeter.Execute(ctx, cmd)
+
+	// Assert: Should return error due to cancelled context
+	// Note: The ConsoleWriter checks context before writing
+	require.True(t, result.IsError(), "Expected error from cancelled context")
+	errInfo := result.ErrorInfo()
+	assert.Equal(t, api.InfrastructureError, errInfo.Kind,
+		"Cancelled context should produce InfrastructureError")
 }

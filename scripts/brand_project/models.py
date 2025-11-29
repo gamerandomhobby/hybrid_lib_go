@@ -145,7 +145,7 @@ class ProjectConfig:
 
     @property
     def old_name_pascal(self) -> str:
-        """Old project name in PascalCase (e.g., HybridLibGo)."""
+        """Old project name in PascalCase (e.g., HybridAppGo)."""
         return to_pascal_case(self.old_name)
 
     @property
@@ -155,7 +155,7 @@ class ProjectConfig:
 
     @property
     def old_name_ada_pascal(self) -> str:
-        """Old project name in Ada PascalCase (e.g., Hybrid_Lib_Go)."""
+        """Old project name in Ada PascalCase (e.g., Hybrid_App_Go)."""
         return to_ada_pascal_case(self.old_name)
 
     @property

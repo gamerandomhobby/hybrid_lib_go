@@ -77,10 +77,10 @@ class GoAdapter(BaseAdapter):
 
         # Project name variations (order: longest first)
         pairs.extend([
-            (config.old_name_ada_pascal, config.new_name_ada_pascal),  # Hybrid_Lib_Go
-            (config.old_name_pascal, config.new_name_pascal),          # HybridLibGo
-            (config.old_name_upper, config.new_name_upper),            # HYBRID_LIB_GO
-            (config.old_name, config.new_name),                        # hybrid_lib_go
+            (config.old_name_ada_pascal, config.new_name_ada_pascal),  # Hybrid_App_Go
+            (config.old_name_pascal, config.new_name_pascal),          # HybridAppGo
+            (config.old_name_upper, config.new_name_upper),            # HYBRID_APP_GO
+            (config.old_name, config.new_name),                        # hybrid_app_go
         ])
 
         return pairs
