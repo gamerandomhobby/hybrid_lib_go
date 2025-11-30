@@ -1,28 +1,18 @@
 #!/usr/bin/env python3
 # ==============================================================================
-# test_arch_guard_go.py - Table-Driven Tests for arch_guard Go Adapter (Library)
+# test_arch_guard_go.py - Table-Driven Tests for arch_guard Go Adapter
 # ==============================================================================
 # Copyright (c) 2025 Michael Gardner, A Bit of Help, Inc.
 # SPDX-License-Identifier: BSD-3-Clause
 # ==============================================================================
 """
-Table-driven test suite for arch_guard Go language adapter (LIBRARY architecture).
+Table-driven test suite for arch_guard Go language adapter.
 
 Uses pytest.mark.parametrize for comprehensive, maintainable tests covering:
 - Layer dependency rules (what can import what)
-- Forbidden dependencies (api→infrastructure)
+- Forbidden dependencies (bootstrap, lateral, presentation→domain)
 - Test code detection in production files
 - Import parsing correctness
-
-LIBRARY ARCHITECTURE (4 layers):
-- domain: ZERO dependencies
-- application: imports domain only
-- infrastructure: imports application, domain
-- api: imports application, domain (NOT infrastructure)
-- api/adapter/desktop: can import all (platform-specific composition)
-
-NOTE: This is for LIBRARY projects. Application projects have 5 layers
-(domain, application, infrastructure, presentation, bootstrap).
 """
 
 from dataclasses import dataclass
@@ -60,10 +50,10 @@ class ImportParseCase:
 
 
 # =============================================================================
-# Test Case Tables - LIBRARY ARCHITECTURE
+# Test Case Tables
 # =============================================================================
 
-# Layer dependency rules for LIBRARY architecture (4 layers)
+# Layer dependency rules - comprehensive coverage
 LAYER_DEPENDENCY_CASES = [
     # Domain layer: ZERO dependencies allowed
     LayerDependencyCase(
@@ -72,7 +62,7 @@ LAYER_DEPENDENCY_CASES = [
         to_layer="application",
         should_violate=True,
         violation_type="ILLEGAL_LAYER_DEPENDENCY",
-        description="Domain is innermost - no outward dependencies",
+        description="Domain is innermost - no outbound dependencies",
     ),
     LayerDependencyCase(
         id="domain_cannot_import_infrastructure",
@@ -82,11 +72,18 @@ LAYER_DEPENDENCY_CASES = [
         violation_type="ILLEGAL_LAYER_DEPENDENCY",
     ),
     LayerDependencyCase(
-        id="domain_cannot_import_api",
+        id="domain_cannot_import_presentation",
         from_layer="domain",
-        to_layer="api",
+        to_layer="presentation",
         should_violate=True,
         violation_type="ILLEGAL_LAYER_DEPENDENCY",
+    ),
+    LayerDependencyCase(
+        id="domain_cannot_import_bootstrap",
+        from_layer="domain",
+        to_layer="bootstrap",
+        should_violate=True,
+        violation_type="FORBIDDEN_BOOTSTRAP_DEPENDENCY",
     ),
 
     # Application layer: can only import Domain
@@ -105,11 +102,18 @@ LAYER_DEPENDENCY_CASES = [
         violation_type="ILLEGAL_LAYER_DEPENDENCY",
     ),
     LayerDependencyCase(
-        id="application_cannot_import_api",
+        id="application_cannot_import_presentation",
         from_layer="application",
-        to_layer="api",
+        to_layer="presentation",
         should_violate=True,
         violation_type="ILLEGAL_LAYER_DEPENDENCY",
+    ),
+    LayerDependencyCase(
+        id="application_cannot_import_bootstrap",
+        from_layer="application",
+        to_layer="bootstrap",
+        should_violate=True,
+        violation_type="FORBIDDEN_BOOTSTRAP_DEPENDENCY",
     ),
 
     # Infrastructure layer: can import Application + Domain
@@ -126,40 +130,79 @@ LAYER_DEPENDENCY_CASES = [
         should_violate=False,
     ),
     LayerDependencyCase(
-        id="infrastructure_cannot_import_api",
+        id="infrastructure_cannot_import_presentation",
         from_layer="infrastructure",
-        to_layer="api",
+        to_layer="presentation",
         should_violate=True,
         violation_type="FORBIDDEN_LATERAL_DEPENDENCY",
-        description="Infrastructure and API are lateral - no cross-dependency allowed",
+        description="No lateral dependencies allowed",
+    ),
+    LayerDependencyCase(
+        id="infrastructure_cannot_import_bootstrap",
+        from_layer="infrastructure",
+        to_layer="bootstrap",
+        should_violate=True,
+        violation_type="FORBIDDEN_BOOTSTRAP_DEPENDENCY",
     ),
 
-    # API layer: can import Application + Domain (NOT Infrastructure!)
+    # Presentation layer: can ONLY import Application (NOT Domain!)
     LayerDependencyCase(
-        id="api_can_import_domain",
-        from_layer="api",
-        to_layer="domain",
-        should_violate=False,
-        description="API facade re-exports domain types",
-    ),
-    LayerDependencyCase(
-        id="api_can_import_application",
-        from_layer="api",
+        id="presentation_can_import_application",
+        from_layer="presentation",
         to_layer="application",
         should_violate=False,
-        description="API facade re-exports application types",
     ),
     LayerDependencyCase(
-        id="api_cannot_import_infrastructure",
-        from_layer="api",
+        id="presentation_cannot_import_domain",
+        from_layer="presentation",
+        to_layer="domain",
+        should_violate=True,
+        violation_type="PRESENTATION_IMPORTS_DOMAIN",
+        description="CRITICAL: Presentation must use Application re-exports",
+    ),
+    LayerDependencyCase(
+        id="presentation_cannot_import_infrastructure",
+        from_layer="presentation",
         to_layer="infrastructure",
         should_violate=True,
         violation_type="FORBIDDEN_LATERAL_DEPENDENCY",
-        description="CRITICAL: API must NOT import infrastructure - use api/adapter/desktop",
+    ),
+    LayerDependencyCase(
+        id="presentation_cannot_import_bootstrap",
+        from_layer="presentation",
+        to_layer="bootstrap",
+        should_violate=True,
+        violation_type="FORBIDDEN_BOOTSTRAP_DEPENDENCY",
+    ),
+
+    # Bootstrap layer: can import ALL layers (composition root)
+    LayerDependencyCase(
+        id="bootstrap_can_import_domain",
+        from_layer="bootstrap",
+        to_layer="domain",
+        should_violate=False,
+    ),
+    LayerDependencyCase(
+        id="bootstrap_can_import_application",
+        from_layer="bootstrap",
+        to_layer="application",
+        should_violate=False,
+    ),
+    LayerDependencyCase(
+        id="bootstrap_can_import_infrastructure",
+        from_layer="bootstrap",
+        to_layer="infrastructure",
+        should_violate=False,
+    ),
+    LayerDependencyCase(
+        id="bootstrap_can_import_presentation",
+        from_layer="bootstrap",
+        to_layer="presentation",
+        should_violate=False,
     ),
 ]
 
-# Import parsing test cases (same as app - language-specific, not arch-specific)
+# Import parsing test cases
 IMPORT_PARSE_CASES = [
     ImportParseCase(
         id="single_import",
@@ -255,32 +298,32 @@ def create_test_file(project: dict, layer: str, filename: str, content: str) -> 
 # =============================================================================
 
 class TestLayerDependencies:
-    """Table-driven tests for layer dependency rules (LIBRARY architecture)."""
+    """Table-driven tests for layer dependency rules."""
 
     @pytest.mark.parametrize(
         "case",
         LAYER_DEPENDENCY_CASES,
         ids=lambda c: c.id,
     )
-    def test_layer_dependency(self, temp_go_lib_project, go_adapter, case: LayerDependencyCase):
+    def test_layer_dependency(self, temp_go_project, go_adapter, case: LayerDependencyCase):
         """Verify layer dependency rules are enforced correctly."""
         # Generate test file
         go_content = generate_go_file(case.from_layer, case.to_layer)
         go_path = create_test_file(
-            temp_go_lib_project,
+            temp_go_project,
             case.from_layer,
             "test_dep.go",
             go_content,
         )
 
         # Validate
-        guard = ArchitectureGuard(temp_go_lib_project["root"], go_adapter)
+        guard = ArchitectureGuard(temp_go_project["root"], go_adapter)
         guard.validate_file(go_path)
 
         # Assert
         if case.should_violate:
             assert len(guard.violations) > 0, (
-                f"Expected violation for {case.from_layer} -> {case.to_layer}"
+                f"Expected violation for {case.from_layer} → {case.to_layer}"
             )
             if case.violation_type:
                 violation_types = [v.violation_type for v in guard.violations]
@@ -289,7 +332,7 @@ class TestLayerDependencies:
                 )
         else:
             assert len(guard.violations) == 0, (
-                f"Unexpected violation for {case.from_layer} -> {case.to_layer}: "
+                f"Unexpected violation for {case.from_layer} → {case.to_layer}: "
                 f"{[v.violation_type for v in guard.violations]}"
             )
 
@@ -306,11 +349,11 @@ class TestImportParsing:
         IMPORT_PARSE_CASES,
         ids=lambda c: c.id,
     )
-    def test_import_parsing(self, temp_go_lib_project, go_adapter, case: ImportParseCase):
+    def test_import_parsing(self, temp_go_project, go_adapter, case: ImportParseCase):
         """Verify import statements are parsed correctly."""
         # Create test file
         go_path = create_test_file(
-            temp_go_lib_project,
+            temp_go_project,
             "domain",
             "parse_test.go",
             case.go_code,
@@ -352,7 +395,7 @@ class TestTestCodeDetection:
         file_path = Path(f"/fake/path/{filename}")
         assert go_adapter.is_test_file(file_path) == should_skip
 
-    def test_testing_import_in_production_flagged(self, prod_go_lib_project, go_adapter):
+    def test_testing_import_in_production_flagged(self, prod_go_project, go_adapter):
         """Production code importing 'testing' package should be flagged."""
         go_content = '''package usecase
 
@@ -365,20 +408,20 @@ func BadCode() {
 }
 '''
         go_path = create_test_file(
-            prod_go_lib_project,
+            prod_go_project,
             "application",
             "bad.go",
             go_content,
         )
 
-        guard = ArchitectureGuard(prod_go_lib_project["root"], go_adapter)
+        guard = ArchitectureGuard(prod_go_project["root"], go_adapter)
         guard.validate_file(go_path)
 
         violations = [v for v in guard.violations
                       if v.violation_type == "TEST_CODE_IN_PRODUCTION"]
         assert len(violations) > 0, "Should flag testing import in production code"
 
-    def test_testing_import_in_test_file_allowed(self, temp_go_lib_project, go_adapter):
+    def test_testing_import_in_test_file_allowed(self, temp_go_project, go_adapter):
         """Test files can import testing package."""
         go_content = '''package usecase
 
@@ -391,13 +434,13 @@ func TestSomething(t *testing.T) {
 }
 '''
         go_path = create_test_file(
-            temp_go_lib_project,
+            temp_go_project,
             "application",
             "usecase_test.go",
             go_content,
         )
 
-        guard = ArchitectureGuard(temp_go_lib_project["root"], go_adapter)
+        guard = ArchitectureGuard(temp_go_project["root"], go_adapter)
         guard.validate_file(go_path)
 
         violations = [v for v in guard.violations
@@ -414,10 +457,10 @@ class TestIntraLayerDependencies:
 
     @pytest.mark.parametrize(
         "layer",
-        ["domain", "application", "infrastructure", "api"],
+        ["domain", "application", "infrastructure", "presentation", "bootstrap"],
         ids=lambda l: f"intra_{l}",
     )
-    def test_same_layer_imports_allowed(self, temp_go_lib_project, go_adapter, layer: str):
+    def test_same_layer_imports_allowed(self, temp_go_project, go_adapter, layer: str):
         """Imports within the same layer should always be allowed."""
         go_content = f'''package subpkg
 
@@ -429,9 +472,9 @@ func Use() {{
     _ = otherpkg.Something
 }}
 '''
-        go_path = create_test_file(temp_go_lib_project, layer, "subpkg/file.go", go_content)
+        go_path = create_test_file(temp_go_project, layer, "subpkg/file.go", go_content)
 
-        guard = ArchitectureGuard(temp_go_lib_project["root"], go_adapter)
+        guard = ArchitectureGuard(temp_go_project["root"], go_adapter)
         guard.validate_file(go_path)
 
         assert len(guard.violations) == 0, (
@@ -444,10 +487,10 @@ func Use() {{
 # =============================================================================
 
 class TestIntegration:
-    """End-to-end integration tests for LIBRARY architecture."""
+    """End-to-end integration tests."""
 
-    def test_valid_library_architecture(self, temp_go_lib_project, go_adapter):
-        """Valid library hexagonal architecture should pass all checks."""
+    def test_valid_hexagonal_architecture(self, temp_go_project, go_adapter):
+        """Valid hexagonal architecture should pass all checks."""
         files = {
             "domain": '''package entity
 
@@ -480,18 +523,15 @@ func (r *Repository) Save(id entity.EntityID) error {
     return nil
 }
 ''',
-            "api": '''package api
+            "presentation": '''package cli
 
 import (
-    "github.com/test/project/domain/entity"
     "github.com/test/project/application/usecase"
 )
 
-// Re-export domain and application types
-type EntityID = entity.EntityID
-
-func Execute() {
+func Run() int {
     usecase.Process(0)
+    return 0
 }
 ''',
         }
@@ -499,61 +539,39 @@ func Execute() {
         # Create all files
         paths = []
         for layer, content in files.items():
-            path = create_test_file(temp_go_lib_project, layer, f"{layer}.go", content)
+            path = create_test_file(temp_go_project, layer, f"{layer}.go", content)
             paths.append(path)
 
         # Validate all
-        guard = ArchitectureGuard(temp_go_lib_project["root"], go_adapter)
+        guard = ArchitectureGuard(temp_go_project["root"], go_adapter)
         for path in paths:
             guard.validate_file(path)
 
         assert len(guard.violations) == 0, (
-            f"Valid library architecture should have no violations: "
+            f"Valid architecture should have no violations: "
             f"{[v.violation_type for v in guard.violations]}"
         )
 
-    def test_api_importing_infrastructure_flagged(self, temp_go_lib_project, go_adapter):
-        """API importing infrastructure should be flagged as violation."""
-        go_content = '''package api
-
-import (
-    "github.com/test/project/infrastructure/adapter"
-)
-
-func Bad() {
-    // API should NOT import infrastructure directly
-    _ = adapter.Something
-}
-'''
-        go_path = create_test_file(temp_go_lib_project, "api", "bad.go", go_content)
-
-        guard = ArchitectureGuard(temp_go_lib_project["root"], go_adapter)
-        guard.validate_file(go_path)
-
-        assert len(guard.violations) > 0, (
-            "API importing infrastructure should be flagged"
-        )
-
-    def test_multiple_violations_detected(self, temp_go_lib_project, go_adapter):
+    def test_multiple_violations_detected(self, temp_go_project, go_adapter):
         """Multiple violations in single file should all be detected."""
         go_content = '''package entity
 
 import (
     "github.com/test/project/application/usecase"
     "github.com/test/project/infrastructure/adapter"
-    "github.com/test/project/api"
+    "github.com/test/project/bootstrap/cli"
 )
 
 func Bad() {
     // Domain importing 3 forbidden layers
 }
 '''
-        go_path = create_test_file(temp_go_lib_project, "domain", "bad.go", go_content)
+        go_path = create_test_file(temp_go_project, "domain", "bad.go", go_content)
 
-        guard = ArchitectureGuard(temp_go_lib_project["root"], go_adapter)
+        guard = ArchitectureGuard(temp_go_project["root"], go_adapter)
         guard.validate_file(go_path)
 
-        # Should have at least 3 violations (app, infra, api)
+        # Should have at least 3 violations (app, infra, bootstrap)
         assert len(guard.violations) >= 3, (
             f"Expected multiple violations, got {len(guard.violations)}"
         )
@@ -581,7 +599,7 @@ def test_go_adapter_instantiation():
 
 @pytest.mark.smoke
 def test_architecture_guard_with_real_project(project_root):
-    """Verify ArchitectureGuard works on real library project."""
+    """Verify ArchitectureGuard works on real project."""
     from arch_guard.arch_guard import detect_language
 
     detected = detect_language(project_root)
@@ -594,6 +612,4 @@ def test_architecture_guard_with_real_project(project_root):
     assert guard is not None
     assert "domain" in guard.layers_present
     assert "application" in guard.layers_present
-    # Library should have api layer, not presentation/bootstrap
-    assert "api" in guard.layers_present or "infrastructure" in guard.layers_present
     assert len(guard.violations) == 0
