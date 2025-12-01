@@ -23,6 +23,23 @@ This is a **reusable library** showcasing:
 - **API Facade Pattern** for clean public interface
 - **Multi-Module Workspace** (compiler-enforced boundaries)
 
+## Getting Started
+
+### Clone with Submodules
+
+This repository uses git submodules for shared tooling. Clone with:
+
+```bash
+git clone --recurse-submodules https://github.com/abitofhelp/hybrid_lib_go.git
+```
+
+Or if already cloned without submodules:
+
+```bash
+git submodule update --init --recursive
+# Or: make submodule-init
+```
+
 ## Features
 
 - ✅ 4-layer hexagonal architecture (Domain, Application, Infrastructure, API)
